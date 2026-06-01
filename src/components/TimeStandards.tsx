@@ -147,6 +147,42 @@ export default function TimeStandards({
     }
   };
 
+  // Delete Product Category Controller
+  const handleDeleteCategory = async (prodToDelete: string) => {
+    if (!prodToDelete) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the product category "${prodToDelete}"? This will disable time standards calculations for this product.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const updatedCosts = JSON.parse(JSON.stringify(categoryCosts));
+      const updatedBreakdowns = JSON.parse(JSON.stringify(taskBreakdowns));
+
+      delete updatedCosts[prodToDelete];
+      delete updatedBreakdowns[prodToDelete];
+
+      const confRef = doc(db, "config", "standards");
+      await setDoc(confRef, {
+        costs: updatedCosts,
+        breakdowns: updatedBreakdowns,
+        taskTypes: taskTypes,
+      });
+
+      // Update current selected product if needed
+      const remainingProducts = Object.keys(updatedCosts);
+      if (selectedProd === prodToDelete) {
+        setSelectedProd(remainingProducts[0] || "");
+      }
+
+      setCategorySuccess(`Product category "${prodToDelete}" successfully deleted.`);
+      onRefresh();
+      setTimeout(() => setCategorySuccess(""), 4000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "config/standards");
+    }
+  };
+
   // Add Product Category Controller
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +214,57 @@ export default function TimeStandards({
       setNewCategoryName("");
       setCategorySuccess(`Product category "${formattedName}" successfully created!`);
       setTimeout(() => setCategorySuccess(""), 4000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "config/standards");
+    }
+  };
+
+  // Delete Task Type Config Controller
+  const handleDeleteTaskType = async (taskToDelete: string) => {
+    if (!taskToDelete) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the task type "${taskToDelete}"? This will remove standard coefficients and tracking configuration for this task type.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      // Remove from taskTypes map
+      const updatedTaskTypes = JSON.parse(JSON.stringify(taskTypes || {}));
+      delete updatedTaskTypes[taskToDelete];
+
+      // Remove from categoryCosts and breakdowns for all categories
+      const updatedCosts = JSON.parse(JSON.stringify(categoryCosts));
+      const updatedBreakdowns = JSON.parse(JSON.stringify(taskBreakdowns));
+
+      Object.keys(updatedCosts).forEach((prodName) => {
+        if (updatedCosts[prodName]) {
+          delete updatedCosts[prodName][taskToDelete];
+        }
+      });
+      Object.keys(updatedBreakdowns).forEach((prodName) => {
+        if (updatedBreakdowns[prodName]) {
+          delete updatedBreakdowns[prodName][taskToDelete];
+        }
+      });
+
+      const confRef = doc(db, "config", "standards");
+      await setDoc(confRef, {
+        costs: updatedCosts,
+        breakdowns: updatedBreakdowns,
+        taskTypes: updatedTaskTypes,
+      });
+
+      // Update current selected task if needed
+      const remainingTasks = Object.keys(updatedTaskTypes).filter(
+        (t) => updatedTaskTypes[t].trackingType === "number"
+      );
+      if (selectedTask === taskToDelete) {
+        setSelectedTask(remainingTasks[0] || "");
+      }
+
+      setTaskSuccess(`Task type "${taskToDelete}" successfully deleted.`);
+      onRefresh();
+      setTimeout(() => setTaskSuccess(""), 4000);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "config/standards");
     }
@@ -469,9 +556,7 @@ export default function TimeStandards({
             {renderPieChart()}
           </div>
         </div>
-      </div>
-
-      {/* Dynamic Creation Grid Form */}
+      </div>      {/* Dynamic Creation Grid Form */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* ADD PRODUCT CATEGORY */}
@@ -515,6 +600,27 @@ export default function TimeStandards({
                 Create Product Option
               </button>
             </form>
+
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-2">
+                Manage / Delete Existing Categories
+              </label>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {products.map((p) => (
+                  <div key={p} className="flex items-center justify-between text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1.5 rounded-lg font-semibold text-gray-700">
+                    <span className="truncate max-w-[200px]">{p}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(p)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-md transition-colors cursor-pointer"
+                      title={`Delete ${p}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -591,6 +697,42 @@ export default function TimeStandards({
                 Define Task Type
               </button>
             </form>
+
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-2">
+                Manage / Delete Existing Task Types
+              </label>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {Object.keys(taskTypes || {}).sort().map((t) => {
+                  const conf = taskTypes[t];
+                  const trackingLabel = conf.trackingType === "number" ? "QTY" : "HRS";
+                  const deptLabel = conf.dept === "both" ? "ALL" : conf.dept.toUpperCase();
+                  return (
+                    <div key={t} className="flex items-center justify-between text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1.5 rounded-lg font-semibold text-gray-700">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate max-w-[130px]" title={t}>{t}</span>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <span className="px-1 text-[8px] font-extrabold bg-blue-50 text-blue-600 border border-blue-250 rounded">
+                            {trackingLabel}
+                          </span>
+                          <span className="px-1 text-[8px] font-extrabold bg-indigo-50 text-indigo-600 border border-indigo-250 rounded">
+                            {deptLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTaskType(t)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-md transition-colors cursor-pointer"
+                        title={`Delete ${t}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
