@@ -1,0 +1,8 @@
+{
+  "name": "Dept. Resource & Quality Planner",
+  "description": "An interactive schedule and workload planner for Engineering and Quality departments, featuring automatic workload logic, sample tracking, time studies, and analytics dashboard reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

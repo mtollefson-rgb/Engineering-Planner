@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Personnel": {
+      "title": "Personnel",
+      "description": "Represents an employee in either quality or engineering department, including their list of assigned tasks.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "Unique identifiers for employee"
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the employee"
+        },
+        "role": {
+          "type": "string",
+          "description": "The specific title/role of the employee"
+        },
+        "dept": {
+          "type": "string",
+          "enum": ["eng", "qual"],
+          "description": "Department code"
+        },
+        "tasks": {
+          "type": "array",
+          "description": "List of tasks assigned to this employee"
+        }
+      },
+      "required": ["id", "name", "role", "dept"]
+    },
+    "StandardsConfig": {
+      "title": "StandardsConfig",
+      "description": "Core time standards for tasks across various products.",
+      "type": "object",
+      "properties": {
+        "costs": {
+          "type": "object",
+          "description": "Mapping from product category to task type base hours"
+        },
+        "breakdowns": {
+          "type": "object",
+          "description": "Detailed multi-subtask breakdown schedules"
+        }
+      }
+    },
+    "SamplesConfig": {
+      "title": "SamplesConfig",
+      "description": "Logs and target counts for physical product samples.",
+      "type": "object",
+      "properties": {
+        "orders": {
+          "type": "array",
+          "description": "List of logged sample purchases"
+        },
+        "targets": {
+          "type": "object",
+          "description": "Desired sample targets indexed by product line"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/personnel/{personnelId}": {
+      "schema": "Personnel",
+      "description": "Store individual personnel profiles with nested task logs"
+    },
+    "/config/standards": {
+      "schema": "StandardsConfig",
+      "description": "Time study models and base hours standards config doc"
+    },
+    "/config/samples": {
+      "schema": "SamplesConfig",
+      "description": "Stores logged sample purchases and tracking target rules"
+    }
+  }
+}

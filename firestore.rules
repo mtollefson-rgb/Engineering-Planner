@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Personnel collection rules
+    match /personnel/{personnelId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Configuration documents rules
+    match /config/{configId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
