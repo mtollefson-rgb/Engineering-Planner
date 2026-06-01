@@ -61,9 +61,38 @@ const mockListeners: MockListener[] = [];
 // Load the offline database dictionary
 const getOfflineDb = (): any => {
   const data = localStorage.getItem("offline_db");
+  const defaultTaskTypes = {
+    "Comparison": { dept: "eng", trackingType: "number" },
+    "Engineering Design": { dept: "eng", trackingType: "number" },
+    "Product Testing": { dept: "eng", trackingType: "number" },
+    "Calibration": { dept: "eng", trackingType: "number" },
+    "Attribute Fill-in": { dept: "eng", trackingType: "number" },
+    "Customer Feedback": { dept: "eng", trackingType: "number" },
+    "Research Assignment": { dept: "eng", trackingType: "number" },
+    "NAPA Tech Line": { dept: "qual", trackingType: "number" },
+    "Warranty Claims": { dept: "qual", trackingType: "number" },
+    "Quarantine": { dept: "qual", trackingType: "number" },
+    "SOPs": { dept: "qual", trackingType: "number" },
+    "Quality Issues": { dept: "qual", trackingType: "number" },
+    "Time Studies": { dept: "qual", trackingType: "number" },
+    "Quality Alerts": { dept: "qual", trackingType: "number" },
+    "Recalls": { dept: "qual", trackingType: "number" },
+    "Meeting": { dept: "both", trackingType: "hours" },
+    "Other": { dept: "both", trackingType: "hours" },
+    "PTO": { dept: "both", trackingType: "hours" },
+    "Holiday": { dept: "both", trackingType: "hours" }
+  };
+
   if (data) {
     try {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (parsed?.config?.standards) {
+        if (!parsed.config.standards.taskTypes) {
+          parsed.config.standards.taskTypes = defaultTaskTypes;
+          localStorage.setItem("offline_db", JSON.stringify(parsed));
+        }
+      }
+      return parsed;
     } catch (e) {
       // ignore JSON parse error
     }
@@ -118,7 +147,7 @@ const getOfflineDb = (): any => {
       "5": { info: { id: 5, name: "GLEN", role: "Quality Tech", dept: "qual" }, tasks: [] }
     },
     config: {
-      standards: { costs: defaultCosts, breakdowns: {} },
+      standards: { costs: defaultCosts, breakdowns: {}, taskTypes: defaultTaskTypes },
       samples: { orders: [], targets: {} }
     }
   };

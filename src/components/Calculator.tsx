@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Employee } from "../types";
+import { Employee, TaskTypeConfig } from "../types";
 import { Calculator as CalcIcon, UserCheck, Calendar, ArrowRight, ShieldAlert } from "lucide-react";
 
 interface CalculatorProps {
@@ -22,29 +22,10 @@ interface CalculatorProps {
       details: string;
     }
   ) => Promise<void>;
+  taskTypes: Record<string, TaskTypeConfig>;
 }
 
-const ENG_TASK_TYPES = [
-  "Comparison",
-  "Engineering Design",
-  "Product Testing",
-  "Calibration",
-  "Attribute Fill-in",
-  "Customer Feedback",
-  "Research Assignment",
-];
-const QUAL_TASK_TYPES = [
-  "NAPA Tech Line",
-  "Warranty Claims",
-  "Quarantine",
-  "SOPs",
-  "Quality Issues",
-  "Time Studies",
-  "Quality Alerts",
-  "Recalls",
-];
-
-export default function Calculator({ personnel, categoryCosts, onAddTask }: CalculatorProps) {
+export default function Calculator({ personnel, categoryCosts, onAddTask, taskTypes }: CalculatorProps) {
   const [selectedProd, setSelectedProd] = useState("");
   const [selectedTask, setSelectedTask] = useState("");
   const [calcQty, setCalcQty] = useState(1);
@@ -59,7 +40,11 @@ export default function Calculator({ personnel, categoryCosts, onAddTask }: Calc
   const [assignNotes, setAssignNotes] = useState("");
 
   const products = Object.keys(categoryCosts).sort();
-  const allAvailableTasks = [...ENG_TASK_TYPES, ...QUAL_TASK_TYPES];
+  
+  // Filter quantity-based tracked tasks from custom configuration
+  const allAvailableTasks = Object.keys(taskTypes || {})
+    .filter((t) => taskTypes[t].trackingType === "number")
+    .sort();
 
   // Set defaults
   useEffect(() => {
@@ -69,10 +54,10 @@ export default function Calculator({ personnel, categoryCosts, onAddTask }: Calc
   }, [categoryCosts]);
 
   useEffect(() => {
-    if (!selectedTask) {
+    if (allAvailableTasks.length > 0 && !selectedTask) {
       setSelectedTask(allAvailableTasks[0]);
     }
-  }, []);
+  }, [taskTypes]);
 
   useEffect(() => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -170,15 +155,8 @@ export default function Calculator({ personnel, categoryCosts, onAddTask }: Calc
               onChange={(e) => setSelectedTask(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none font-semibold text-gray-750"
             >
-              <optgroup label="Engineering Deliverables">
-                {ENG_TASK_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Quality Audits / Lines">
-                {QUAL_TASK_TYPES.map((t) => (
+              <optgroup label="Quantity Tracked Tasks">
+                {allAvailableTasks.map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>

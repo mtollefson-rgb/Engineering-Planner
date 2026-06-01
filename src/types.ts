@@ -46,3 +46,8 @@ export interface Subtask {
   name: string;
   hours: number;
 }
+
+export interface TaskTypeConfig {
+  dept: "eng" | "qual" | "both";
+  trackingType: "hours" | "number";
+}

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Employee, Task } from "../types";
+import { Employee, Task, TaskTypeConfig } from "../types";
 import {
   Calendar,
   Layers,
@@ -20,27 +20,6 @@ import {
   CheckCircle,
   AlertTriangle,
 } from "lucide-react";
-
-const ENG_TASK_TYPES = [
-  "Comparison",
-  "Engineering Design",
-  "Product Testing",
-  "Calibration",
-  "Attribute Fill-in",
-  "Customer Feedback",
-  "Research Assignment",
-];
-const QUAL_TASK_TYPES = [
-  "NAPA Tech Line",
-  "Warranty Claims",
-  "Quarantine",
-  "SOPs",
-  "Quality Issues",
-  "Time Studies",
-  "Quality Alerts",
-  "Recalls",
-];
-const MANUAL_TASK_TYPES = ["Meeting", "Other", "PTO", "Holiday"];
 
 interface DashboardProps {
   personnel: Employee[];
@@ -70,6 +49,7 @@ interface DashboardProps {
     details: string
   ) => Promise<void>;
   onBlockTask: (pId: number, tId: number, reason: string) => Promise<void>;
+  taskTypes: Record<string, TaskTypeConfig>;
 }
 
 export default function Dashboard({
@@ -82,6 +62,7 @@ export default function Dashboard({
   onUpdateTaskStatus,
   onEditTask,
   onBlockTask,
+  taskTypes,
 }: DashboardProps) {
   // Input fields state
   const [selectedEmpId, setSelectedEmpId] = useState<number>(0);
@@ -109,15 +90,25 @@ export default function Dashboard({
   const activeStaff = personnel.filter((p) => p.dept === activeDept);
   const products = Object.keys(categoryCosts).sort();
 
-  // Reset employee selection when department changes
+  // Dynamically group tracking methods based on backend config standards
+  const deptTrackedTasks = Object.keys(taskTypes || {}).filter((t) => {
+    const conf = taskTypes[t];
+    return (conf.dept === activeDept || conf.dept === "both") && conf.trackingType === "number";
+  }).sort();
+
+  const deptManualTasks = Object.keys(taskTypes || {}).filter((t) => {
+    const conf = taskTypes[t];
+    return (conf.dept === activeDept || conf.dept === "both") && conf.trackingType === "hours";
+  }).sort();
+
+  // Reset employee selection when department changes or task types load
   useEffect(() => {
     if (activeStaff.length > 0) {
       setSelectedEmpId(activeStaff[0].id);
     }
-    // Set default tasks
-    const firstType = activeDept === "eng" ? ENG_TASK_TYPES[0] : QUAL_TASK_TYPES[0];
+    const firstType = deptTrackedTasks[0] || deptManualTasks[0] || "";
     setTaskType(firstType);
-  }, [activeDept, personnel]);
+  }, [activeDept, personnel, taskTypes]);
 
   useEffect(() => {
     if (products.length > 0 && !product) {
@@ -195,7 +186,7 @@ export default function Dashboard({
     let cost = categoryCosts[product]?.[taskType];
     if (cost === undefined) cost = 1.0;
 
-    const isManual = MANUAL_TASK_TYPES.includes(taskType);
+    const isManual = taskTypes[taskType]?.trackingType === "hours";
     if (isManual) {
       const hours = parseFloat(manualHours);
       if (isNaN(hours) || hours <= 0) {
@@ -372,30 +363,28 @@ export default function Dashboard({
               onChange={(e) => setTaskType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
             >
-              <optgroup label="Standard Tracked Tasks">
-                {activeDept === "eng"
-                  ? ENG_TASK_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))
-                  : QUAL_TASK_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-              </optgroup>
-              <optgroup label="Manual / Non-Product Blocks">
-                {MANUAL_TASK_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </optgroup>
+              {deptTrackedTasks.length > 0 && (
+                <optgroup label="Standard Tracked Tasks (By Multiplier)">
+                  {deptTrackedTasks.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {deptManualTasks.length > 0 && (
+                <optgroup label="Manual / Non-Product Blocks (By Hours)">
+                  {deptManualTasks.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
-          {MANUAL_TASK_TYPES.includes(taskType) && (
+          {taskTypes[taskType]?.trackingType === "hours" && (
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                 Total Manual Hrs

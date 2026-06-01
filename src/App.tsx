@@ -21,7 +21,29 @@ import {
   isOfflineMode,
   setOfflineMode
 } from "./firebase";
-import { Employee, Task, SampleOrder } from "./types";
+import { Employee, Task, SampleOrder, TaskTypeConfig } from "./types";
+
+const DEFAULT_TASK_TYPES: Record<string, TaskTypeConfig> = {
+  "Comparison": { dept: "eng", trackingType: "number" },
+  "Engineering Design": { dept: "eng", trackingType: "number" },
+  "Product Testing": { dept: "eng", trackingType: "number" },
+  "Calibration": { dept: "eng", trackingType: "number" },
+  "Attribute Fill-in": { dept: "eng", trackingType: "number" },
+  "Customer Feedback": { dept: "eng", trackingType: "number" },
+  "Research Assignment": { dept: "eng", trackingType: "number" },
+  "NAPA Tech Line": { dept: "qual", trackingType: "number" },
+  "Warranty Claims": { dept: "qual", trackingType: "number" },
+  "Quarantine": { dept: "qual", trackingType: "number" },
+  "SOPs": { dept: "qual", trackingType: "number" },
+  "Quality Issues": { dept: "qual", trackingType: "number" },
+  "Time Studies": { dept: "qual", trackingType: "number" },
+  "Quality Alerts": { dept: "qual", trackingType: "number" },
+  "Recalls": { dept: "qual", trackingType: "number" },
+  "Meeting": { dept: "both", trackingType: "hours" },
+  "Other": { dept: "both", trackingType: "hours" },
+  "PTO": { dept: "both", trackingType: "hours" },
+  "Holiday": { dept: "both", trackingType: "hours" },
+};
 
 // Component imports
 import Login from "./components/Login";
@@ -57,6 +79,7 @@ export default function App() {
   const [personnel, setPersonnel] = useState<Employee[]>([]);
   const [categoryCosts, setCategoryCosts] = useState<Record<string, Record<string, number>>>({});
   const [taskBreakdowns, setTaskBreakdowns] = useState<Record<string, Record<string, any>>>({});
+  const [taskTypes, setTaskTypes] = useState<Record<string, TaskTypeConfig>>({});
   const [sampleOrders, setSampleOrders] = useState<SampleOrder[]>([]);
   const [sampleTargets, setSampleTargets] = useState<Record<string, number>>({});
 
@@ -151,6 +174,7 @@ export default function App() {
             const data = d.data();
             setCategoryCosts(data.costs || {});
             setTaskBreakdowns(data.breakdowns || {});
+            setTaskTypes(data.taskTypes || DEFAULT_TASK_TYPES);
           }
         },
         (error) => {
@@ -226,7 +250,7 @@ export default function App() {
       const confRef = doc(db, "config", "standards");
       const confSnap = await getDoc(confRef);
       if (!confSnap.exists()) {
-        await setDoc(confRef, { costs: defaultCosts, breakdowns: {} });
+        await setDoc(confRef, { costs: defaultCosts, breakdowns: {}, taskTypes: DEFAULT_TASK_TYPES });
       } else {
         // Enforce Calibration exists incrementally under all standard products
         const data = confSnap.data();
@@ -245,8 +269,15 @@ export default function App() {
           }
         });
 
+        if (!data.taskTypes) {
+          updateNeeded = true;
+        }
+
         if (updateNeeded) {
-          await updateDoc(confRef, { costs: existingCosts });
+          await updateDoc(confRef, {
+            costs: existingCosts,
+            taskTypes: data.taskTypes || DEFAULT_TASK_TYPES
+          });
         }
       }
 
@@ -675,6 +706,7 @@ export default function App() {
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onEditTask={handleEditTask}
               onBlockTask={handleBlockTask}
+              taskTypes={taskTypes}
             />
           )}
 
@@ -689,6 +721,7 @@ export default function App() {
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onEditTask={handleEditTask}
               onBlockTask={handleBlockTask}
+              taskTypes={taskTypes}
             />
           )}
 
@@ -710,6 +743,7 @@ export default function App() {
               personnel={personnel}
               categoryCosts={categoryCosts}
               onAddTask={handleAddNewTask}
+              taskTypes={taskTypes}
             />
           )}
 
@@ -719,6 +753,7 @@ export default function App() {
               categoryCosts={categoryCosts}
               taskBreakdowns={taskBreakdowns}
               onRefresh={() => {}}
+              taskTypes={taskTypes}
             />
           )}
 

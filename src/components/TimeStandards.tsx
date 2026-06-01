@@ -4,35 +4,16 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Employee, Subtask } from "../types";
+import { Employee, Subtask, TaskTypeConfig } from "../types";
 import { doc, setDoc, db, handleFirestoreError, OperationType } from "../firebase";
-import { Clock, Plus, Trash2, CheckCircle, Save } from "lucide-react";
-
-const ENG_TASK_TYPES = [
-  "Comparison",
-  "Engineering Design",
-  "Product Testing",
-  "Calibration",
-  "Attribute Fill-in",
-  "Customer Feedback",
-  "Research Assignment",
-];
-const QUAL_TASK_TYPES = [
-  "NAPA Tech Line",
-  "Warranty Claims",
-  "Quarantine",
-  "SOPs",
-  "Quality Issues",
-  "Time Studies",
-  "Quality Alerts",
-  "Recalls",
-];
+import { Clock, Plus, Trash2, CheckCircle, Save, FolderPlus, FilePlus, Settings, Check } from "lucide-react";
 
 interface TimeStandardsProps {
   personnel: Employee[];
   categoryCosts: Record<string, Record<string, number>>;
   taskBreakdowns: Record<string, Record<string, Subtask[]>>;
   onRefresh: () => void;
+  taskTypes: Record<string, TaskTypeConfig>;
 }
 
 export default function TimeStandards({
@@ -40,16 +21,30 @@ export default function TimeStandards({
   categoryCosts,
   taskBreakdowns,
   onRefresh,
+  taskTypes,
 }: TimeStandardsProps) {
   const [selectedProd, setSelectedProd] = useState("");
   const [selectedTask, setSelectedTask] = useState("");
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [successMsg, setSuccessMsg] = useState("");
 
-  const products = Object.keys(categoryCosts).sort();
-  const allAvailableTasks = [...ENG_TASK_TYPES, ...QUAL_TASK_TYPES];
+  // Category and Task management states
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categorySuccess, setCategorySuccess] = useState("");
 
-  // Set defaults
+  const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskDept, setNewTaskDept] = useState<"eng" | "qual" | "both">("eng");
+  const [newTaskTrackingType, setNewTaskTrackingType] = useState<"hours" | "number">("number");
+  const [taskSuccess, setTaskSuccess] = useState("");
+
+  const products = Object.keys(categoryCosts).sort();
+  
+  // We edit standard hours of "number" tracking types (which depend on product categories)
+  const allAvailableTasks = Object.keys(taskTypes || {})
+    .filter((taskName) => taskTypes[taskName].trackingType === "number")
+    .sort();
+
+  // Set defaults when lists change or load
   useEffect(() => {
     if (products.length > 0 && !selectedProd) {
       setSelectedProd(products[0]);
@@ -57,10 +52,10 @@ export default function TimeStandards({
   }, [categoryCosts]);
 
   useEffect(() => {
-    if (!selectedTask) {
+    if (allAvailableTasks.length > 0 && !selectedTask) {
       setSelectedTask(allAvailableTasks[0]);
     }
-  }, []);
+  }, [taskTypes]);
 
   // Fetch or initialize breakdowns when selection changes
   useEffect(() => {
@@ -117,6 +112,7 @@ export default function TimeStandards({
       await setDoc(confRef, {
         costs: updatedCosts,
         breakdowns: updatedBreakdowns,
+        taskTypes: taskTypes,
       });
 
       // Retroactively align all personnel tasks of this category + type
@@ -146,6 +142,87 @@ export default function TimeStandards({
       setSuccessMsg(`Successfully updated standards & recalculated schedules with a base ${newTotalCost.toFixed(1)}h allowance!`);
       onRefresh();
       setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "config/standards");
+    }
+  };
+
+  // Add Product Category Controller
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formattedName = newCategoryName.trim();
+    if (!formattedName) return;
+
+    if (categoryCosts[formattedName]) {
+      alert(`Product category "${formattedName}" already exists.`);
+      return;
+    }
+
+    try {
+      const updatedCosts = JSON.parse(JSON.stringify(categoryCosts));
+      updatedCosts[formattedName] = {};
+
+      // Initialize defaults for the new product category across all current active quantity-based task types
+      allAvailableTasks.forEach((taskName) => {
+        updatedCosts[formattedName][taskName] = 1.0; 
+      });
+
+      const confRef = doc(db, "config", "standards");
+      await setDoc(confRef, {
+        costs: updatedCosts,
+        breakdowns: taskBreakdowns,
+        taskTypes: taskTypes,
+      });
+
+      setSelectedProd(formattedName);
+      setNewCategoryName("");
+      setCategorySuccess(`Product category "${formattedName}" successfully created!`);
+      setTimeout(() => setCategorySuccess(""), 4000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "config/standards");
+    }
+  };
+
+  // Add Task Type Config Controller
+  const handleAddTaskType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formattedName = newTaskName.trim();
+    if (!formattedName) return;
+
+    if (taskTypes[formattedName]) {
+      alert(`Task type "${formattedName}" already exists.`);
+      return;
+    }
+
+    try {
+      // Deep Copy current taskTypes map and insert the configured specs
+      const updatedTaskTypes = JSON.parse(JSON.stringify(taskTypes || {}));
+      updatedTaskTypes[formattedName] = {
+        dept: newTaskDept,
+        trackingType: newTaskTrackingType,
+      };
+
+      // If it is numeric (quantity based), initialize standard category costs for this new task
+      const updatedCosts = JSON.parse(JSON.stringify(categoryCosts));
+      if (newTaskTrackingType === "number") {
+        Object.keys(updatedCosts).forEach((prodName) => {
+          updatedCosts[prodName][formattedName] = 1.0; // 1.0 hour baseline
+        });
+      }
+
+      const confRef = doc(db, "config", "standards");
+      await setDoc(confRef, {
+        costs: updatedCosts,
+        breakdowns: taskBreakdowns,
+        taskTypes: updatedTaskTypes,
+      });
+
+      if (newTaskTrackingType === "number") {
+        setSelectedTask(formattedName);
+      }
+      setNewTaskName("");
+      setTaskSuccess(`Task type "${formattedName}" mapped under tracking mode "${newTaskTrackingType.toUpperCase()}"!`);
+      setTimeout(() => setTaskSuccess(""), 4000);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "config/standards");
     }
@@ -182,8 +259,8 @@ export default function TimeStandards({
     ];
 
     return (
-      <div className="bg-white p-5 border border-gray-200 rounded-xl flex flex-col md:flex-row items-center gap-6 shadow-3xs">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
+      <div className="bg-white p-5 border border-gray-200 rounded-xl flex flex-col md:flex-row items-center gap-6 shadow-3xs w-full">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0 mx-auto md:mx-0">
           <g transform={`rotate(-90 ${center} ${center})`}>
             {subtasks.map((s, idx) => {
               if (s.hours <= 0) return null;
@@ -264,10 +341,11 @@ export default function TimeStandards({
         </div>
       )}
 
+      {/* Editor Block */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center uppercase tracking-tight">
           <Clock className="text-blue-600 mr-2 h-5 w-5" />
-          Time Standards
+          Product Time Standards Editor
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-gray-100 pb-5 mb-5">
@@ -278,7 +356,7 @@ export default function TimeStandards({
             <select
               value={selectedProd}
               onChange={(e) => setSelectedProd(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700"
             >
               {products.map((p) => (
                 <option key={p} value={p}>
@@ -290,14 +368,14 @@ export default function TimeStandards({
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-              Task Type Standard
+              Task Type Standard (Quantity-based)
             </label>
             <select
               value={selectedTask}
               onChange={(e) => setSelectedTask(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none font-semibold text-gray-750"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-750"
             >
-              <optgroup label="Standard Tracked Tasks">
+              <optgroup label="Quantity Tracked Tasks">
                 {allAvailableTasks.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -328,7 +406,7 @@ export default function TimeStandards({
                       placeholder="e.g. Set up apparatus"
                       value={s.name}
                       onChange={(e) => handleUpdateSubtask(idx, "name", e.target.value)}
-                      className="flex-1 px-3 py-1.5 border border-gray-350 rounded-lg text-sm bg-gray-50 uppercase placeholder-gray-400 focus:outline-none"
+                      className="flex-1 px-3 py-1.5 border border-gray-350 rounded-lg text-sm bg-gray-50 uppercase placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <div className="flex items-center gap-1">
                       <input
@@ -337,7 +415,7 @@ export default function TimeStandards({
                         min="0"
                         value={s.hours}
                         onChange={(e) => handleUpdateSubtask(idx, "hours", e.target.value)}
-                        className="w-20 px-2 py-1.5 border border-gray-350 text-center rounded-lg text-sm bg-gray-50 font-bold focus:outline-none text-gray-700"
+                        className="w-20 px-2 py-1.5 border border-gray-350 text-center rounded-lg text-sm bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
                       />
                       <span className="text-xs text-gray-400 font-bold">h</span>
                     </div>
@@ -391,6 +469,131 @@ export default function TimeStandards({
             {renderPieChart()}
           </div>
         </div>
+      </div>
+
+      {/* Dynamic Creation Grid Form */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* ADD PRODUCT CATEGORY */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
+              <FolderPlus className="text-teal-600 h-5 w-5" />
+              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Add New Product Category</h4>
+            </div>
+            
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Create a custom engineering product track. The custom product will be initialized with 1.0 hour baseline standards across all existing quantity-based task types.
+            </p>
+
+            {categorySuccess && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 font-medium flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-green-600" />
+                {categorySuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleAddCategory} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+                  Product Category Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Electric Lift Supports"
+                  required
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Plus className="h-4 w-4" />
+                Create Product Option
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* ADD TASK TYPE */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
+              <FilePlus className="text-indigo-600 h-5 w-5" />
+              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Add Custom Task Type</h4>
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Register a dynamic task. You can classify it as **By Hours** (direct duration entry e.g. Meetings, Training) or **By Quantity Number** (product coefficient e.g. Attribute Fill-Ins).
+            </p>
+
+            {taskSuccess && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 font-medium flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-green-600" />
+                {taskSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleAddTaskType} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+                    Department Access
+                  </label>
+                  <select
+                    value={newTaskDept}
+                    onChange={(e) => setNewTaskDept(e.target.value as any)}
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                  >
+                    <option value="eng">Engineering Only</option>
+                    <option value="qual">Quality Only</option>
+                    <option value="both">Both Departments</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+                    Tracking Matrix Type
+                  </label>
+                  <select
+                    value={newTaskTrackingType}
+                    onChange={(e) => setNewTaskTrackingType(e.target.value as any)}
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-blue-600"
+                  >
+                    <option value="number">By Number (Quantity-based)</option>
+                    <option value="hours">By Hours (Meeting/Block duration)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+                  Task Type Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Field Investigation"
+                  required
+                  value={newTaskName}
+                  onChange={(e) => setNewTaskName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Plus className="h-4 w-4" />
+                Define Task Type
+              </button>
+            </form>
+          </div>
+        </div>
+
       </div>
     </div>
   );
