@@ -555,9 +555,6 @@ export default function App() {
             <Grid className="text-blue-600 h-6 w-6" />
             Dept. Resource &amp; Quality Planner
           </h1>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1">
-            Engineering Planners (Maxwell, Lee, Jordon, Tim) • Quality (Ron, Glen)
-          </p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
