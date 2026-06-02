@@ -46,7 +46,9 @@ interface DashboardProps {
     tId: number,
     start: Date,
     end: Date,
-    details: string
+    details: string,
+    qty?: number,
+    totalHours?: number
   ) => Promise<void>;
   onBlockTask: (pId: number, tId: number, reason: string) => Promise<void>;
   taskTypes: Record<string, TaskTypeConfig>;
@@ -89,10 +91,18 @@ export default function Dashboard({
     start: string;
     end: string;
     details: string;
+    qty?: number;
+    totalHours?: number;
   } | null>(null);
 
   const activeStaff = personnel.filter((p) => p.dept === activeDept);
   const products = Object.keys(categoryCosts).sort();
+
+  // Find info about the currently edited task if any
+  const editingEmp = editingTask ? personnel.find((p) => p.id === editingTask.pId) : null;
+  const originalTask = (editingTask && editingEmp) ? editingEmp.tasks.find((t) => String(t.id) === String(editingTask.tId)) : null;
+  const taskConfig = originalTask ? taskTypes[originalTask.type] : null;
+  const isNumberTracking = taskConfig ? taskConfig.trackingType === "number" : true;
 
   // Dynamically group tracking methods based on backend config standards
   const deptTrackedTasks = Object.keys(taskTypes || {}).filter((t) => {
@@ -285,7 +295,15 @@ export default function Dashboard({
       return;
     }
 
-    await onEditTask(editingTask.pId, editingTask.tId, start, end, editingTask.details);
+    await onEditTask(
+      editingTask.pId,
+      editingTask.tId,
+      start,
+      end,
+      editingTask.details,
+      editingTask.qty,
+      editingTask.totalHours
+    );
     setEditingTask(null);
   };
 
@@ -744,6 +762,8 @@ export default function Dashboard({
                                     start: new Date(t.start).toISOString().split("T")[0],
                                     end: new Date(t.end).toISOString().split("T")[0],
                                     details: t.details || "",
+                                    qty: t.qty || 1,
+                                    totalHours: t.totalHours || 0,
                                   })
                                 }
                                 className="text-gray-400 hover:text-blue-600 p-1 hover:bg-gray-50 rounded-sm transition-colors cursor-pointer"
@@ -901,6 +921,49 @@ export default function Dashboard({
                   onChange={(e) => setEditingTask({ ...editingTask, end: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none"
                 />
+              </div>
+
+              <div className={isNumberTracking ? "grid grid-cols-2 gap-4" : ""}>
+                {isNumberTracking && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                      Quantity / Units
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editingTask.qty ?? 1}
+                      onChange={(e) =>
+                        setEditingTask({
+                          ...editingTask,
+                          qty: Math.max(1, parseInt(e.target.value) || 1),
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Total Hours
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={editingTask.totalHours ?? 0}
+                    onChange={(e) =>
+                      setEditingTask({
+                        ...editingTask,
+                        totalHours: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700"
+                  />
+                </div>
               </div>
 
               <div>

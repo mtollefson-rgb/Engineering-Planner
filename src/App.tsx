@@ -484,7 +484,9 @@ export default function App() {
     tId: number,
     start: Date,
     end: Date,
-    details: string
+    details: string,
+    qty?: number,
+    totalHours?: number
   ) => {
     const employee = personnel.find((p) => p.id === pId);
     if (!employee) return;
@@ -498,6 +500,19 @@ export default function App() {
           u.start = start;
           u.end = end;
           u.details = details;
+          if (qty !== undefined) {
+            u.qty = qty;
+          }
+          if (totalHours !== undefined) {
+            u.totalHours = totalHours;
+          }
+          if (qty !== undefined && totalHours !== undefined) {
+            u.costPerUnit = qty > 0 ? totalHours / qty : 0;
+          } else if (totalHours !== undefined) {
+            u.costPerUnit = u.qty > 0 ? totalHours / u.qty : 0;
+          } else if (qty !== undefined) {
+            u.costPerUnit = qty > 0 ? u.totalHours / qty : 0;
+          }
 
           const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1;
           u.dailyRate = u.totalHours / Math.max(1, duration);
