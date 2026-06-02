@@ -50,6 +50,8 @@ interface DashboardProps {
   ) => Promise<void>;
   onBlockTask: (pId: number, tId: number, reason: string) => Promise<void>;
   taskTypes: Record<string, TaskTypeConfig>;
+  focusedTaskInfo?: { pId: number; tId: number; date: Date } | null;
+  onClearFocusTask?: () => void;
 }
 
 export default function Dashboard({
@@ -63,6 +65,8 @@ export default function Dashboard({
   onEditTask,
   onBlockTask,
   taskTypes,
+  focusedTaskInfo,
+  onClearFocusTask,
 }: DashboardProps) {
   // Input fields state
   const [selectedEmpId, setSelectedEmpId] = useState<number>(0);
@@ -123,11 +127,26 @@ export default function Dashboard({
     setEndDate(todayStr);
   }, []);
 
+  // Scroll focused task into interactive view
+  useEffect(() => {
+    if (focusedTaskInfo) {
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`task-card-${focusedTaskInfo.tId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [focusedTaskInfo]);
+
   const getMonday = (d: Date) => {
     const date = new Date(d);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff));
+    const monday = new Date(date.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
   };
 
   const addDays = (d: Date, n: number) => {
@@ -139,6 +158,7 @@ export default function Dashboard({
   // Capacity calculations for progress display
   const getWeeklyLoad = (person: Employee, weekStart: Date) => {
     const weekEnd = addDays(weekStart, 6);
+    weekEnd.setHours(23, 59, 59, 999);
     let projectHours = 0;
 
     const tasks = person.tasks.filter((t) => {
@@ -312,6 +332,26 @@ export default function Dashboard({
           <ChevronRight className="h-5 w-5 text-gray-600" />
         </button>
       </div>
+
+      {focusedTaskInfo && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex justify-between items-center text-xs font-bold text-amber-800 shadow-3xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>Target assignment located! The active card is highlighted with a gold boundary below.</span>
+          </div>
+          {onClearFocusTask && (
+            <button
+              onClick={onClearFocusTask}
+              className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-900 rounded-md transition-all cursor-pointer text-[10px] font-black uppercase tracking-wider shadow-3xs hover:scale-[1.02]"
+            >
+              Clear Focus Flag
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Task Creation Form Panel */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs">
@@ -498,6 +538,7 @@ export default function Dashboard({
 
             // Get weekly tasks
             const weekEnd = addDays(currentWeekStart, 6);
+            weekEnd.setHours(23, 59, 59, 999);
             const weeklyTasks = p.tasks.filter((t) => {
               const ts = new Date(t.start);
               const te = new Date(t.end);
@@ -587,18 +628,22 @@ export default function Dashboard({
                       taskEnd.setHours(23, 59, 59, 999);
                       const isLate = !isComp && taskEnd.getTime() < today.getTime();
                       const isPTO = t.type === "PTO" || t.type === "Holiday";
+                      const isFocused = focusedTaskInfo && String(t.id) === String(focusedTaskInfo.tId);
 
                       return (
                         <div
                           key={t.id}
-                          className={`border rounded-lg p-3 text-sm relative transition-all ${
-                            isComp
-                              ? "bg-green-50 border-green-200 opacity-75"
-                              : t.blocked
-                                ? "bg-red-50 border-red-200 border-dashed"
-                                : isLate
-                                  ? "bg-red-50 border-red-300"
-                                  : "bg-white border-gray-220 hover:border-gray-300"
+                          id={`task-card-${t.id}`}
+                          className={`border rounded-lg p-3 text-sm relative transition-all duration-300 ${
+                            isFocused
+                              ? "ring-4 ring-amber-500 bg-amber-50/50 border-amber-500 shadow-md scale-[1.01] z-5"
+                              : isComp
+                                ? "bg-green-50 border-green-200 opacity-75"
+                                : t.blocked
+                                  ? "bg-red-50 border-red-200 border-dashed"
+                                  : isLate
+                                    ? "bg-red-50 border-red-300"
+                                    : "bg-white border-gray-220 hover:border-gray-300"
                           }`}
                         >
                           {/* Header of single task */}
@@ -607,6 +652,11 @@ export default function Dashboard({
                               {isPTO ? `📅 ${t.type}` : `${t.category} - ${t.type}`}
                             </span>
                             <div className="flex items-center gap-1.5 leading-none">
+                              {isFocused && (
+                                <span className="bg-amber-600 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-extrabold uppercase animate-pulse">
+                                  📌 Target
+                                </span>
+                              )}
                               {t.blocked && (
                                 <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded-sm font-extrabold uppercase">
                                   Blocked

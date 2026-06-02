@@ -89,12 +89,17 @@ export default function App() {
     "eng" | "qual" | "completed" | "samples" | "calculator" | "standards" | "team" | "exec"
   >("eng");
 
+  // Track task selection from directory (locate task flow)
+  const [focusedTaskInfo, setFocusedTaskInfo] = useState<{ pId: number; tId: number; date: Date } | null>(null);
+
   // Scheduling standard base dates
   const getMonday = (d: Date) => {
     const date = new Date(d);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff));
+    const monday = new Date(date.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
   };
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getMonday(new Date()));
 
@@ -571,6 +576,21 @@ export default function App() {
     }
   };
 
+  // Switch to correct view, align week, and store focus info for scheduling highlights
+  const handleFocusTask = (pId: number, tId: number, date: Date) => {
+    const employee = personnel.find((p) => p.id === pId);
+    if (!employee) return;
+
+    setActiveTab(employee.dept === "eng" ? "eng" : "qual");
+    setCurrentWeekStart(getMonday(date));
+    setFocusedTaskInfo({ pId, tId, date });
+  };
+
+  const handleClearFocusTask = () => {
+    setFocusedTaskInfo(null);
+    setCurrentWeekStart(getMonday(new Date()));
+  };
+
   if (!authReady) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
@@ -760,6 +780,8 @@ export default function App() {
               onEditTask={handleEditTask}
               onBlockTask={handleBlockTask}
               taskTypes={taskTypes}
+              focusedTaskInfo={focusedTaskInfo}
+              onClearFocusTask={handleClearFocusTask}
             />
           )}
 
@@ -775,6 +797,8 @@ export default function App() {
               onEditTask={handleEditTask}
               onBlockTask={handleBlockTask}
               taskTypes={taskTypes}
+              focusedTaskInfo={focusedTaskInfo}
+              onClearFocusTask={handleClearFocusTask}
             />
           )}
 
@@ -817,6 +841,7 @@ export default function App() {
               onRefresh={() => {}}
               currentUserEmail={currentUser.email || undefined}
               auditLogs={auditLogs}
+              onFocusTask={handleFocusTask}
             />
           )}
 

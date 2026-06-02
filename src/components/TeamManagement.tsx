@@ -13,6 +13,7 @@ interface TeamManagementProps {
   onRefresh: () => void;
   currentUserEmail?: string;
   auditLogs?: any[];
+  onFocusTask?: (pId: number, tId: number, date: Date) => void;
 }
 
 export default function TeamManagement({
@@ -20,6 +21,7 @@ export default function TeamManagement({
   onRefresh,
   currentUserEmail,
   auditLogs = [],
+  onFocusTask,
 }: TeamManagementProps) {
   const [activeDept, setActiveDept] = useState<"eng" | "qual" | "logs">("eng");
   const [newName, setNewName] = useState("");
@@ -632,7 +634,14 @@ export default function TeamManagement({
                               return (
                                 <div
                                   key={task.id}
-                                  className="bg-white border border-gray-250 rounded-lg p-2.5 text-xs font-semibold text-gray-700 flex flex-col gap-1.5 shadow-2xs"
+                                  onClick={() => {
+                                    if (onFocusTask) {
+                                      const dateVal = task.start instanceof Date ? task.start : new Date(task.start);
+                                      onFocusTask(emp.id, task.id, dateVal);
+                                    }
+                                  }}
+                                  className="bg-white border border-gray-250 hover:border-blue-400 hover:shadow-xs rounded-lg p-2.5 text-xs font-semibold text-gray-700 flex flex-col gap-1.5 shadow-2xs cursor-pointer transition-all hover:scale-[1.01] group relative"
+                                  title="Go to this task in the Engineering/Quality Schedule to mark complete or edit"
                                 >
                                   {/* Task basic Header */}
                                   <div className="flex items-start justify-between gap-1.5">
@@ -682,6 +691,16 @@ export default function TeamManagement({
                                       {task.details}
                                     </p>
                                   )}
+
+                                  {/* Visual navigation nudge helper indicator */}
+                                  <div className="mt-1 flex justify-end border-t border-gray-100 pt-1.5">
+                                    <span className="text-[9px] text-blue-600 group-hover:text-blue-700 font-extrabold flex items-center gap-1 uppercase tracking-widest leading-none">
+                                      <span>Locate in Schedule</span>
+                                      <svg className="h-3 w-3 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                                      </svg>
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
