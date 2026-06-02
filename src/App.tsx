@@ -349,6 +349,22 @@ export default function App() {
     });
   };
 
+  // Helper to deduplicate tasks list by id, preserving the latest element (usually trailing)
+  const deduplicateTasks = (tasks: Task[]): Task[] => {
+    const seen = new Set<string>();
+    const unique: Task[] = [];
+    for (let i = tasks.length - 1; i >= 0; i--) {
+      const t = tasks[i];
+      if (!t) continue;
+      const tidStr = String(t.id);
+      if (!seen.has(tidStr)) {
+        seen.add(tidStr);
+        unique.unshift(t);
+      }
+    }
+    return unique;
+  };
+
   // Standard Task addition controller
   const handleAddNewTask = async (
     pId: number,
@@ -403,7 +419,7 @@ export default function App() {
 
     try {
       const ref = doc(db, "personnel", String(pId));
-      const updatedTasks = [...employee.tasks, newTask];
+      const updatedTasks = deduplicateTasks([...employee.tasks, newTask]);
       await updateDoc(ref, { tasks: updatedTasks });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `personnel/${pId}`);
@@ -417,35 +433,37 @@ export default function App() {
 
     const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
 
-    const updatedTasks = employee.tasks
-      .map((t) => {
-        if (t.id === tId) {
-          const updated = { ...t };
-          if (action === "complete") {
-            updated.completed = true;
-            updated.isDone = true;
-            const compDate = new Date();
-            updated.completedDate = compDate;
+    const updatedTasks = deduplicateTasks(
+      employee.tasks
+        .map((t) => {
+          if (String(t.id) === String(tId)) {
+            const updated = { ...t };
+            if (action === "complete") {
+              updated.completed = true;
+              updated.isDone = true;
+              const compDate = new Date();
+              updated.completedDate = compDate;
 
-            const taskEnd = new Date(t.end);
-            taskEnd.setHours(23, 59, 59, 999);
-            updated.status = compDate.getTime() <= taskEnd.getTime() ? "On Time" : "Late";
-            updated.history = [
-              ...(t.history || []),
-              { date: new Date(), action: `Deliverable Approved Completed by ${userAlias}` },
-            ];
-          } else if (action === "unblock") {
-            updated.blocked = false;
-            updated.history = [
-              ...(t.history || []),
-              { date: new Date(), action: `Deliverable Block Lifted by ${userAlias}` },
-            ];
+              const taskEnd = new Date(t.end);
+              taskEnd.setHours(23, 59, 59, 999);
+              updated.status = compDate.getTime() <= taskEnd.getTime() ? "On Time" : "Late";
+              updated.history = [
+                ...(t.history || []),
+                { date: new Date(), action: `Deliverable Approved Completed by ${userAlias}` },
+              ];
+            } else if (action === "unblock") {
+              updated.blocked = false;
+              updated.history = [
+                ...(t.history || []),
+                { date: new Date(), action: `Deliverable Block Lifted by ${userAlias}` },
+              ];
+            }
+            return updated;
           }
-          return updated;
-        }
-        return t;
-      })
-      .filter((t) => !(t.id === tId && action === "delete"));
+          return t;
+        })
+        .filter((t) => !(String(t.id) === String(tId) && action === "delete"))
+    );
 
     try {
       const ref = doc(db, "personnel", String(pId));
@@ -468,20 +486,22 @@ export default function App() {
 
     const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
 
-    const updatedTasks = employee.tasks.map((t) => {
-      if (t.id === tId) {
-        const u = { ...t };
-        u.start = start;
-        u.end = end;
-        u.details = details;
+    const updatedTasks = deduplicateTasks(
+      employee.tasks.map((t) => {
+        if (String(t.id) === String(tId)) {
+          const u = { ...t };
+          u.start = start;
+          u.end = end;
+          u.details = details;
 
-        const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1;
-        u.dailyRate = u.totalHours / Math.max(1, duration);
-        u.history = [...(t.history || []), { date: new Date(), action: `Task Properties Edited by ${userAlias}` }];
-        return u;
-      }
-      return t;
-    });
+          const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1;
+          u.dailyRate = u.totalHours / Math.max(1, duration);
+          u.history = [...(t.history || []), { date: new Date(), action: `Task Properties Edited by ${userAlias}` }];
+          return u;
+        }
+        return t;
+      })
+    );
 
     try {
       const ref = doc(db, "personnel", String(pId));
@@ -498,18 +518,20 @@ export default function App() {
 
     const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
 
-    const updatedTasks = employee.tasks.map((t) => {
-      if (t.id === tId) {
-        const u = { ...t };
-        u.blocked = true;
-        u.history = [
-          ...(t.history || []),
-          { date: new Date(), action: `Deliverable Blocked by ${userAlias}: ${reason}` },
-        ];
-        return u;
-      }
-      return t;
-    });
+    const updatedTasks = deduplicateTasks(
+      employee.tasks.map((t) => {
+        if (String(t.id) === String(tId)) {
+          const u = { ...t };
+          u.blocked = true;
+          u.history = [
+            ...(t.history || []),
+            { date: new Date(), action: `Deliverable Blocked by ${userAlias}: ${reason}` },
+          ];
+          return u;
+        }
+        return t;
+      })
+    );
 
     try {
       const ref = doc(db, "personnel", String(pId));
@@ -526,18 +548,20 @@ export default function App() {
 
     const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
 
-    const updatedTasks = employee.tasks.map((t) => {
-      if (t.id === tId) {
-        const u = { ...t };
-        u.completed = false;
-        u.isDone = false;
-        u.completedDate = null;
-        u.status = "";
-        u.history = [...(t.history || []), { date: new Date(), action: `Assignment Reopened by ${userAlias}` }];
-        return u;
-      }
-      return t;
-    });
+    const updatedTasks = deduplicateTasks(
+      employee.tasks.map((t) => {
+        if (String(t.id) === String(tId)) {
+          const u = { ...t };
+          u.completed = false;
+          u.isDone = false;
+          u.completedDate = null;
+          u.status = "";
+          u.history = [...(t.history || []), { date: new Date(), action: `Assignment Reopened by ${userAlias}` }];
+          return u;
+        }
+        return t;
+      })
+    );
 
     try {
       const ref = doc(db, "personnel", String(pId));

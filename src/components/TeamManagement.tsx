@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { doc, setDoc, deleteDoc, updateDoc, arrayUnion, db, handleFirestoreError, OperationType } from "../firebase";
 import { Employee, Task } from "../types";
-import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert, Edit, X, Check, History } from "lucide-react";
+import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert, Edit, X, Check, History, ChevronDown, ChevronUp, Calendar, Clock } from "lucide-react";
 
 interface TeamManagementProps {
   personnel: Employee[];
@@ -35,6 +35,30 @@ export default function TeamManagement({
   // States for inline role editing
   const [editingEmpId, setEditingEmpId] = useState<number | null>(null);
   const [editingRoleValue, setEditingRoleValue] = useState("");
+
+  // States for expanding employee unfinished task details
+  const [expandedEmps, setExpandedEmps] = useState<Record<number, boolean>>({});
+
+  const formatTaskDate = (d: any): string => {
+    if (!d) return "N/A";
+    try {
+      const dateObj = d.toDate ? d.toDate() : new Date(d);
+      return dateObj.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch (err) {
+      return "N/A";
+    }
+  };
+
+  const toggleEmpExpanded = (empId: number) => {
+    setExpandedEmps((prev) => ({
+      ...prev,
+      [empId]: !prev[empId],
+    }));
+  };
 
   const handleUpdateRole = async (emp: Employee, newRoleText: string) => {
     const formattedRole = newRoleText.trim();
@@ -182,8 +206,9 @@ export default function TeamManagement({
         const reassigner = currentUserEmail ? currentUserEmail.split("@")[0].toUpperCase() : "SYSTEM";
 
         // Prepare reassigned tasks
-        const reassignedTasks: Task[] = unfinished.map((t) => ({
+        const reassignedTasks: Task[] = unfinished.map((t, idx) => ({
           ...t,
+          id: Date.now() + idx + Math.round(Math.random() * 1000), // Assign a fresh unique ID
           history: [
             ...(t.history || []),
             {
@@ -242,6 +267,27 @@ export default function TeamManagement({
   };
 
   const deptMembers = activeDept !== "logs" ? personnel.filter((p) => p.dept === activeDept) : [];
+
+  const isAllExpanded = deptMembers.length > 0 && deptMembers.every((emp) => {
+    const unfinished = emp.tasks.filter((t) => !t.completed && !t.isDone);
+    if (unfinished.length === 0) return true;
+    return !!expandedEmps[emp.id];
+  });
+
+  const toggleAllExpanded = () => {
+    if (isAllExpanded) {
+      setExpandedEmps({});
+    } else {
+      const nextExpanded: Record<number, boolean> = {};
+      deptMembers.forEach((emp) => {
+        const unfinished = emp.tasks.filter((t) => !t.completed && !t.isDone);
+        if (unfinished.length > 0) {
+          nextExpanded[emp.id] = true;
+        }
+      });
+      setExpandedEmps(nextExpanded);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -446,101 +492,202 @@ export default function TeamManagement({
         {/* Members Directory */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Current {activeDept === "eng" ? "Engineering" : "Quality"} Staff
-            </h3>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                Current {activeDept === "eng" ? "Engineering" : "Quality"} Staff
+              </h3>
+              <button
+                type="button"
+                onClick={toggleAllExpanded}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center gap-1.5 shadow-3xs cursor-pointer"
+              >
+                <Clock className="h-3.5 w-3.5 text-gray-500" />
+                {isAllExpanded ? "Collapse All Tasks" : "Expand All Tasks"}
+              </button>
+            </div>
             {deptMembers.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-8">
                 No active employee directory listings. Use the left panel to register staff.
               </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 {deptMembers.map((emp) => {
                   const unfinished = emp.tasks.filter((t) => !t.completed && !t.isDone);
+                  const isExpanded = !!expandedEmps[emp.id];
                   return (
                     <div
                       key={emp.id}
-                      className="border border-gray-250 hover:border-gray-300 rounded-xl p-4 bg-gray-50 flex justify-between items-start transition-all"
+                      className="border border-gray-250 hover:border-gray-300 rounded-xl p-4 bg-gray-50 flex flex-col gap-3 transition-all"
                     >
-                      <div>
-                        <h4 className="font-bold text-gray-900 text-sm uppercase">{emp.name}</h4>
-                        {editingEmpId === emp.id ? (
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={editingRoleValue}
-                              onChange={(e) => setEditingRoleValue(e.target.value)}
-                              className="px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700 w-44"
-                              placeholder="New Role Description"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  handleUpdateRole(emp, editingRoleValue);
-                                } else if (e.key === "Escape") {
+                      <div className="flex justify-between items-start w-full gap-2 font-sans">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-sm uppercase">{emp.name}</h4>
+                          {editingEmpId === emp.id ? (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editingRoleValue}
+                                onChange={(e) => setEditingRoleValue(e.target.value)}
+                                className="px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700 w-44 font-sans"
+                                placeholder="New Role Description"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    handleUpdateRole(emp, editingRoleValue);
+                                  } else if (e.key === "Escape") {
+                                    setEditingEmpId(null);
+                                    setEditingRoleValue("");
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateRole(emp, editingRoleValue)}
+                                className="p-1 px-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
+                                title="Save new role"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   setEditingEmpId(null);
                                   setEditingRoleValue("");
-                                }
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateRole(emp, editingRoleValue)}
-                              className="p-1 px-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
-                              title="Save new role"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingEmpId(null);
-                                setEditingRoleValue("");
-                              }}
-                              className="p-1 px-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
-                              title="Cancel"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="mt-1 flex items-center gap-2 group/role">
-                            <p className="text-xs text-gray-500 font-bold">{emp.role}</p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingEmpId(emp.id);
-                                setEditingRoleValue(emp.role);
-                              }}
-                              className="opacity-75 md:opacity-0 md:group-hover/role:opacity-100 hover:text-blue-600 text-gray-400 p-0.5 rounded transition-all cursor-pointer inline-flex items-center"
-                              title="Edit role description"
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                        <div className="mt-3 flex gap-2">
+                                }}
+                                className="p-1 px-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
+                                title="Cancel"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-2 group/role">
+                              <p className="text-xs text-gray-500 font-bold">{emp.role}</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingEmpId(emp.id);
+                                  setEditingRoleValue(emp.role);
+                                }}
+                                className="opacity-75 md:opacity-0 md:group-hover/role:opacity-100 hover:text-blue-600 text-gray-400 p-0.5 rounded transition-all cursor-pointer inline-flex items-center"
+                                title="Edit role description"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => startDeleteEmployee(emp)}
+                          className="p-1 px-2.5 text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 rounded-lg flex items-center transition-all cursor-pointer flex-shrink-0"
+                          title="Remove Employee"
+                        >
+                          <UserMinus className="h-4 w-4 mr-1" />
+                          Remove
+                        </button>
+                      </div>
+
+                      {/* Info badges row */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-200 font-sans">
+                        <div className="flex items-center gap-2">
                           <span className="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-md font-semibold">
                             ID: {emp.id}
                           </span>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-md font-bold ${
+                          <button
+                            type="button"
+                            onClick={() => unfinished.length > 0 && toggleEmpExpanded(emp.id)}
+                            disabled={unfinished.length === 0}
+                            className={`text-xs px-2 py-0.5 rounded-md font-bold transition-all flex items-center gap-1 ${
                               unfinished.length > 0
-                                ? "bg-amber-50 border border-amber-200 text-amber-700"
-                                : "bg-green-50 border border-green-200 text-green-700"
+                                ? "bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 cursor-pointer"
+                                : "bg-green-50 border border-green-200 text-green-700 cursor-default"
                             }`}
                           >
                             {unfinished.length} unfinished tasks
-                          </span>
+                            {unfinished.length > 0 && (
+                              isExpanded ? <ChevronUp className="h-3.5 w-3.5 inline" /> : <ChevronDown className="h-3.5 w-3.5 inline" />
+                            )}
+                          </button>
                         </div>
+
+                        {unfinished.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleEmpExpanded(emp.id)}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-bold cursor-pointer flex items-center gap-0.5"
+                          >
+                            {isExpanded ? "Hide Tasks" : "View Tasks"}
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={() => startDeleteEmployee(emp)}
-                        className="p-1 px-2.5 text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 rounded-lg flex items-center transition-all cursor-pointer"
-                        title="Remove Employee"
-                      >
-                        <UserMinus className="h-4 w-4 mr-1" />
-                        Remove
-                      </button>
+
+                      {/* Unfinished tasks list panel */}
+                      {isExpanded && unfinished.length > 0 && (
+                        <div className="mt-2 pt-3 border-t border-dashed border-gray-200 space-y-2 font-sans">
+                          <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                            Unfinished Assignments ({unfinished.length})
+                          </p>
+                          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                            {unfinished.map((task) => {
+                              return (
+                                <div
+                                  key={task.id}
+                                  className="bg-white border border-gray-250 rounded-lg p-2.5 text-xs font-semibold text-gray-700 flex flex-col gap-1.5 shadow-2xs"
+                                >
+                                  {/* Task basic Header */}
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <div className="flex flex-col">
+                                      <span className="font-extrabold text-gray-900 text-xs uppercase leading-none">
+                                        {task.category}
+                                      </span>
+                                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide mt-0.5">
+                                        {task.type}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {task.blocked && (
+                                        <span className="bg-red-50 text-red-700 border border-red-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 animate-pulse uppercase">
+                                          <AlertTriangle className="h-2.5 w-2.5" />
+                                          Blocked
+                                        </span>
+                                      )}
+                                      <span
+                                        className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border uppercase ${
+                                          task.priority === "High"
+                                            ? "bg-red-50 border-red-200 text-red-700 font-bold"
+                                            : task.priority === "Medium"
+                                              ? "bg-amber-50 border-amber-200 text-amber-700 font-bold"
+                                              : "bg-gray-100 border-gray-250 text-gray-600 font-bold"
+                                        }`}
+                                      >
+                                        {task.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Dates & Hours */}
+                                  <div className="flex items-center justify-between text-[11px] text-gray-650 font-mono gap-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
+                                    <span className="flex items-center gap-1 font-semibold">
+                                      <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                                      {formatTaskDate(task.start)} → {formatTaskDate(task.end)}
+                                    </span>
+                                    <span className="font-extrabold text-gray-900 bg-white border border-gray-200 px-1 py-0.5 rounded-sm">
+                                      {task.totalHours} hrs
+                                    </span>
+                                  </div>
+
+                                  {/* Notes/Details */}
+                                  {task.details && (
+                                    <p className="text-[10px] text-gray-500 italic leading-snug border-l-2 border-gray-300 pl-1.5 mt-0.5 font-medium">
+                                      {task.details}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
