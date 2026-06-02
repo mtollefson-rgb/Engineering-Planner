@@ -40,6 +40,7 @@ export interface SampleOrder {
   date: string;
   product: string;
   qty: number;
+  loggedBy?: string;
 }
 
 export interface Subtask {

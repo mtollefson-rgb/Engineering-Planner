@@ -6,15 +6,22 @@
 import React, { useState } from "react";
 import { doc, setDoc, deleteDoc, updateDoc, arrayUnion, db, handleFirestoreError, OperationType } from "../firebase";
 import { Employee, Task } from "../types";
-import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert, Edit, X, Check } from "lucide-react";
+import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert, Edit, X, Check, History } from "lucide-react";
 
 interface TeamManagementProps {
   personnel: Employee[];
   onRefresh: () => void;
+  currentUserEmail?: string;
+  auditLogs?: any[];
 }
 
-export default function TeamManagement({ personnel, onRefresh }: TeamManagementProps) {
-  const [activeDept, setActiveDept] = useState<"eng" | "qual">("eng");
+export default function TeamManagement({
+  personnel,
+  onRefresh,
+  currentUserEmail,
+  auditLogs = [],
+}: TeamManagementProps) {
+  const [activeDept, setActiveDept] = useState<"eng" | "qual" | "logs">("eng");
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -49,6 +56,25 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
           role: formattedRole,
         },
       });
+
+      // Log audit action
+      const operator = currentUserEmail ? currentUserEmail.split("@")[0].toUpperCase() : "SYSTEM";
+      const timestamp = new Date().toISOString();
+      try {
+        const auditRef = doc(db, "config", "audit_logs");
+        await updateDoc(auditRef, {
+          logs: arrayUnion({
+            id: `${Date.now()}-${Math.random()}`,
+            date: timestamp,
+            operator,
+            empName: emp.name,
+            action: "ROLE_CHANGED",
+            details: `Changed role from "${emp.role}" to "${formattedRole}"`,
+          }),
+        });
+      } catch (logErr) {
+        console.error("Failed to write personnel audit log:", logErr);
+      }
 
       setSuccessMsg(`Successfully updated role for ${emp.name} to "${formattedRole}"!`);
       setEditingEmpId(null);
@@ -90,6 +116,25 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
         },
         tasks: [],
       });
+
+      // Log audit action
+      const operator = currentUserEmail ? currentUserEmail.split("@")[0].toUpperCase() : "SYSTEM";
+      const timestamp = new Date().toISOString();
+      try {
+        const auditRef = doc(db, "config", "audit_logs");
+        await updateDoc(auditRef, {
+          logs: arrayUnion({
+            id: `${Date.now()}-${Math.random()}`,
+            date: timestamp,
+            operator,
+            empName: newEmployee.name,
+            action: "EMPLOYEE_ADDED",
+            details: `Added as a new member of the ${newEmployee.dept === "eng" ? "Engineering" : "Quality"} department with role "${newEmployee.role}"`,
+          }),
+        });
+      } catch (logErr) {
+        console.error("Failed to write personnel audit log:", logErr);
+      }
 
       setSuccessMsg(`Successfully added ${newEmployee.name} to the team!`);
       setNewName("");
@@ -134,6 +179,8 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
           return;
         }
 
+        const reassigner = currentUserEmail ? currentUserEmail.split("@")[0].toUpperCase() : "SYSTEM";
+
         // Prepare reassigned tasks
         const reassignedTasks: Task[] = unfinished.map((t) => ({
           ...t,
@@ -141,7 +188,7 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
             ...(t.history || []),
             {
               date: new Date(),
-              action: `Reassigned from ${emp.name}`,
+              action: `Reassigned from ${emp.name} by ${reassigner}`,
             },
           ],
         }));
@@ -154,6 +201,30 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
 
       // Delete the employee doc
       await deleteDoc(doc(db, "personnel", String(emp.id)));
+
+      // Log audit action
+      const operator = currentUserEmail ? currentUserEmail.split("@")[0].toUpperCase() : "SYSTEM";
+      const timestamp = new Date().toISOString();
+      try {
+        const auditRef = doc(db, "config", "audit_logs");
+        let reassignDetails = "None";
+        if (reassignToId !== null && unfinished.length > 0) {
+          const targetEmployee = personnel.find((p) => p.id === reassignToId);
+          reassignDetails = targetEmployee ? `Reassigned ${unfinished.length} tasks to ${targetEmployee.name}` : `Reassigned ${unfinished.length} tasks`;
+        }
+        await updateDoc(auditRef, {
+          logs: arrayUnion({
+            id: `${Date.now()}-${Math.random()}`,
+            date: timestamp,
+            operator,
+            empName: emp.name,
+            action: "EMPLOYEE_REMOVED",
+            details: `Removed from the ${emp.dept === "eng" ? "Engineering" : "Quality"} department. Outstanding obligations: ${reassignDetails}`,
+          }),
+        });
+      } catch (logErr) {
+        console.error("Failed to write personnel audit log:", logErr);
+      }
 
       setSuccessMsg(
         `Successfully removed ${emp.name}.${
@@ -170,7 +241,7 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
     }
   };
 
-  const deptMembers = personnel.filter((p) => p.dept === activeDept);
+  const deptMembers = activeDept !== "logs" ? personnel.filter((p) => p.dept === activeDept) : [];
 
   return (
     <div className="space-y-6">
@@ -219,9 +290,92 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
         >
           Quality Team Directory
         </button>
+        <button
+          onClick={() => {
+            setActiveDept("logs");
+            setErrorMsg(null);
+            setSuccessMsg("");
+          }}
+          className={`py-3 px-6 font-bold text-sm tracking-wide border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeDept === "logs"
+              ? "border-amber-600 text-amber-600 font-bold"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <History className="h-4 w-4" />
+          Personnel Change Audit Logs
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {activeDept === "logs" ? (
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs space-y-4">
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center">
+              <History className="text-amber-600 mr-2 h-5 w-5" />
+              Personnel Action Audit Trail
+            </h3>
+            <p className="text-xs text-gray-500 font-semibold mt-1">
+              Historical timeline of human resource changes including registry additions, staff removals, and title/role modifications.
+            </p>
+          </div>
+
+          {!auditLogs || auditLogs.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-semibold italic bg-gray-50 border border-gray-150 rounded-xl">
+              No personnel change activity logs have been recorded yet. Update an employee's title or register a new team member to start tracking changes.
+            </div>
+          ) : (
+            <div className="overflow-x-auto text-sm">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase font-extrabold tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3 text-left">Timestamp</th>
+                    <th className="px-6 py-3 text-left">Employee Name</th>
+                    <th className="px-6 py-3 text-left">Action</th>
+                    <th className="px-6 py-3 text-left">Modifications &amp; Details</th>
+                    <th className="px-6 py-3 text-right">Modified By</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200 font-medium">
+                  {[...auditLogs]
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-500 font-bold font-mono">
+                          {new Date(log.date).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 font-black uppercase">
+                          {log.empName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase border ${
+                              log.action === "ROLE_CHANGED"
+                                ? "bg-amber-50 border-amber-200 text-amber-700"
+                                : log.action === "EMPLOYEE_ADDED"
+                                  ? "bg-green-50 border-green-200 text-green-700"
+                                  : "bg-red-50 border-red-200 text-red-700"
+                            }`}
+                          >
+                            {log.action.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 text-xs leading-relaxed font-bold">
+                          {log.details}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 uppercase">
+                            {log.operator || "SYSTEM"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form panel */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs h-fit">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
@@ -395,6 +549,7 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
           </div>
         </div>
       </div>
+      )}
 
       {/* Reassign Modal Overlay */}
       {showReassignModal && deletingEmployee && (

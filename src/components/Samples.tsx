@@ -13,6 +13,7 @@ interface SamplesProps {
   sampleOrders: SampleOrder[];
   sampleTargets: Record<string, number>;
   onRefresh: () => void;
+  currentUserEmail?: string;
 }
 
 const MONTHS = [
@@ -35,6 +36,7 @@ export default function Samples({
   sampleOrders,
   sampleTargets,
   onRefresh,
+  currentUserEmail,
 }: SamplesProps) {
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedProd, setSelectedProd] = useState("");
@@ -118,6 +120,7 @@ export default function Samples({
         date: purchaseDate,
         product: selectedProd,
         qty: qty,
+        loggedBy: currentUserEmail || "Unknown Planner",
       };
 
       const ref = doc(db, "config", "samples");
@@ -503,6 +506,61 @@ export default function Samples({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Sample Procurement History Logs */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs">
+        <h3 className="text-md font-bold text-gray-900 uppercase tracking-tight flex items-center mb-4 text-slate-800">
+          <Calendar className="mr-2 h-5 w-5 text-indigo-600" />
+          Recent Procurement Activity Logs
+        </h3>
+        
+        {sampleOrders.length === 0 ? (
+          <p className="text-sm font-semibold text-gray-400 italic py-4 text-center bg-gray-50 border border-gray-150 rounded-xl">
+            No procurement orders have been logged yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase font-bold tracking-wider">
+                <tr>
+                  <th className="px-6 py-3 text-left">Date Purchased</th>
+                  <th className="px-6 py-3 text-left">Product Category</th>
+                  <th className="px-6 py-3 text-center">Procured Volume</th>
+                  <th className="px-6 py-3 text-right">Logged By</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200 font-medium">
+                {[...sampleOrders]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .slice(0, 15) // show up to 15 recent orders
+                  .map((order, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 font-bold font-mono">
+                        {order.date}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-700 italic uppercase text-xs font-bold">
+                        {order.product}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-gray-800 font-bold">
+                        {order.qty} units
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 uppercase">
+                          {order.loggedBy ? order.loggedBy.split("@")[0] : "System"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+            {sampleOrders.length > 15 && (
+              <p className="text-center text-xs text-gray-400 font-semibold mt-3">
+                Showing 15 most recent procurement logs.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

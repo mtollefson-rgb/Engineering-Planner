@@ -82,6 +82,7 @@ export default function App() {
   const [taskTypes, setTaskTypes] = useState<Record<string, TaskTypeConfig>>({});
   const [sampleOrders, setSampleOrders] = useState<SampleOrder[]>([]);
   const [sampleTargets, setSampleTargets] = useState<Record<string, number>>({});
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Active user tab
   const [activeTab, setActiveTab] = useState<
@@ -196,10 +197,24 @@ export default function App() {
         }
       );
 
+      const unsubAuditLogs = onSnapshot(
+        doc(db, "config", "audit_logs"),
+        (d) => {
+          if (d.exists()) {
+            const data = d.data();
+            setAuditLogs(data.logs || []);
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, "config/audit_logs");
+        }
+      );
+
       return () => {
         unsubPersonnel();
         unsubStandards();
         unsubSamples();
+        unsubAuditLogs();
       };
     });
   }, [currentUser]);
@@ -288,6 +303,13 @@ export default function App() {
         await setDoc(samplesRef, { orders: [], targets: {} });
       }
 
+      // Audit Logs setup
+      const auditRef = doc(db, "config", "audit_logs");
+      const auditSnap = await getDoc(auditRef);
+      if (!auditSnap.exists()) {
+        await setDoc(auditRef, { logs: [] });
+      }
+
       // Personnel Default Seed
       const initialEmployees = [
         { id: 0, name: "MAXWELL", role: "Eng 1", dept: "eng" },
@@ -354,6 +376,8 @@ export default function App() {
       (taskData.end.getTime() - taskData.start.getTime()) / (1000 * 60 * 60 * 24) + 1;
     const dailyRate = totalHours / Math.max(1, duration);
 
+    const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
+
     const newTask: Task = {
       id: Date.now(),
       category: taskData.category,
@@ -372,7 +396,7 @@ export default function App() {
       history: [
         {
           date: new Date(),
-          action: "Assignment Logged",
+          action: `Assignment Logged by ${userAlias}`,
         },
       ],
     };
@@ -391,6 +415,8 @@ export default function App() {
     const employee = personnel.find((p) => p.id === pId);
     if (!employee) return;
 
+    const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
+
     const updatedTasks = employee.tasks
       .map((t) => {
         if (t.id === tId) {
@@ -406,13 +432,13 @@ export default function App() {
             updated.status = compDate.getTime() <= taskEnd.getTime() ? "On Time" : "Late";
             updated.history = [
               ...(t.history || []),
-              { date: new Date(), action: "Deliverable Approved Completed" },
+              { date: new Date(), action: `Deliverable Approved Completed by ${userAlias}` },
             ];
           } else if (action === "unblock") {
             updated.blocked = false;
             updated.history = [
               ...(t.history || []),
-              { date: new Date(), action: "Deliverable Block Lifted" },
+              { date: new Date(), action: `Deliverable Block Lifted by ${userAlias}` },
             ];
           }
           return updated;
@@ -440,6 +466,8 @@ export default function App() {
     const employee = personnel.find((p) => p.id === pId);
     if (!employee) return;
 
+    const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
+
     const updatedTasks = employee.tasks.map((t) => {
       if (t.id === tId) {
         const u = { ...t };
@@ -449,7 +477,7 @@ export default function App() {
 
         const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1;
         u.dailyRate = u.totalHours / Math.max(1, duration);
-        u.history = [...(t.history || []), { date: new Date(), action: "Task Properties Edited" }];
+        u.history = [...(t.history || []), { date: new Date(), action: `Task Properties Edited by ${userAlias}` }];
         return u;
       }
       return t;
@@ -468,13 +496,15 @@ export default function App() {
     const employee = personnel.find((p) => p.id === pId);
     if (!employee) return;
 
+    const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
+
     const updatedTasks = employee.tasks.map((t) => {
       if (t.id === tId) {
         const u = { ...t };
         u.blocked = true;
         u.history = [
           ...(t.history || []),
-          { date: new Date(), action: `Deliverable Blocked: ${reason}` },
+          { date: new Date(), action: `Deliverable Blocked by ${userAlias}: ${reason}` },
         ];
         return u;
       }
@@ -494,6 +524,8 @@ export default function App() {
     const employee = personnel.find((p) => p.id === pId);
     if (!employee) return;
 
+    const userAlias = currentUser?.email ? currentUser.email.split("@")[0].toUpperCase() : "SYSTEM";
+
     const updatedTasks = employee.tasks.map((t) => {
       if (t.id === tId) {
         const u = { ...t };
@@ -501,7 +533,7 @@ export default function App() {
         u.isDone = false;
         u.completedDate = null;
         u.status = "";
-        u.history = [...(t.history || []), { date: new Date(), action: "Assignment Reopened" }];
+        u.history = [...(t.history || []), { date: new Date(), action: `Assignment Reopened by ${userAlias}` }];
         return u;
       }
       return t;
@@ -732,6 +764,7 @@ export default function App() {
               sampleOrders={sampleOrders}
               sampleTargets={sampleTargets}
               onRefresh={() => {}}
+              currentUserEmail={currentUser.email || undefined}
             />
           )}
 
@@ -755,7 +788,12 @@ export default function App() {
           )}
 
           {activeTab === "team" && (
-            <TeamManagement personnel={personnel} onRefresh={() => {}} />
+            <TeamManagement
+              personnel={personnel}
+              onRefresh={() => {}}
+              currentUserEmail={currentUser.email || undefined}
+              auditLogs={auditLogs}
+            />
           )}
 
           {activeTab === "exec" && <ExecutiveDashboard personnel={personnel} />}
