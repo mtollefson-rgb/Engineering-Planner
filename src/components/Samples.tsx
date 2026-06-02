@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { SampleOrder } from "../types";
 import { doc, updateDoc, arrayUnion, db, handleFirestoreError, OperationType } from "../firebase";
-import { Calendar, Package, Plus, Target, CheckCircle } from "lucide-react";
+import { Calendar, Package, Plus, Target, CheckCircle, Eye } from "lucide-react";
 
 interface SamplesProps {
   categoryCosts: Record<string, Record<string, number>>;
@@ -41,8 +41,63 @@ export default function Samples({
   const [qty, setQty] = useState(1);
   const [successMsg, setSuccessMsg] = useState("");
   const [hoveredMonths, setHoveredMonths] = useState<Record<string, number | null>>({});
+  const [visibleProducts, setVisibleProducts] = useState<string[] | null>(null);
 
   const products = Object.keys(categoryCosts).sort();
+
+  // Load / initialize visible products
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem("sample_tracker_visible_products");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((p) => products.includes(p));
+          setVisibleProducts(valid);
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    if (products.length > 0) {
+      setVisibleProducts(products);
+    }
+  }, [categoryCosts]);
+
+  const handleToggleProduct = (prod: string) => {
+    const list = visibleProducts !== null ? visibleProducts : products;
+    let updated: string[];
+    if (list.includes(prod)) {
+      updated = list.filter((p) => p !== prod);
+    } else {
+      updated = [...list, prod];
+    }
+    setVisibleProducts(updated);
+    try {
+      localStorage.setItem("sample_tracker_visible_products", JSON.stringify(updated));
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleShowAll = () => {
+    setVisibleProducts(products);
+    try {
+      localStorage.setItem("sample_tracker_visible_products", JSON.stringify(products));
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleHideAll = () => {
+    setVisibleProducts([]);
+    try {
+      localStorage.setItem("sample_tracker_visible_products", JSON.stringify([]));
+    } catch (e) {
+      // ignore
+    }
+  };
 
   // Pick first product as default
   React.useEffect(() => {
@@ -185,8 +240,63 @@ export default function Samples({
           Active Product Sparklines ({new Date().getFullYear()})
         </h4>
 
+        {/* Dynamic Display Filtering Controls */}
+        <div className="bg-slate-50 border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-150 pb-2">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-slate-500" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-655">
+                Show/Hide Product Categories
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleShowAll}
+                className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+              >
+                Show All
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                type="button"
+                onClick={handleHideAll}
+                className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 hover:text-slate-750 transition-colors cursor-pointer"
+              >
+                Hide All
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {products.map((p) => {
+              const isVisible = visibleProducts?.includes(p) ?? true;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => handleToggleProduct(p)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-all border flex items-center gap-1.5 ${
+                    isVisible
+                      ? "bg-blue-50 text-blue-700 border-blue-200 shadow-3xs"
+                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-200 hover:bg-gray-100 hover:text-gray-600"
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isVisible ? "bg-blue-600 animate-pulse" : "bg-gray-300"
+                    }`}
+                  />
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((prod) => {
+          {products
+            .filter((prod) => visibleProducts === null || visibleProducts.includes(prod))
+            .map((prod) => {
             const target = sampleTargets[prod] || 20;
             const sums = getMonthlySumsForProduct(prod);
             const maxVal = Math.max(target, ...sums, 1);
@@ -384,6 +494,14 @@ export default function Samples({
               </div>
             );
           })}
+
+          {products.filter((p) => visibleProducts === null || visibleProducts.includes(p)).length === 0 && (
+            <div className="col-span-full py-12 text-center bg-gray-50 border border-gray-150 rounded-xl">
+              <p className="text-sm font-semibold text-gray-400 italic">
+                All product category graphs are currently hidden. Select options above to display.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
