@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { doc, setDoc, deleteDoc, updateDoc, arrayUnion, db, handleFirestoreError, OperationType } from "../firebase";
 import { Employee, Task } from "../types";
-import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert } from "lucide-react";
+import { UserPlus, UserMinus, AlertTriangle, CheckCircle, ShieldAlert, Edit, X, Check } from "lucide-react";
 
 interface TeamManagementProps {
   personnel: Employee[];
@@ -24,6 +24,40 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
   const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
   const [reassignTargetId, setReassignTargetId] = useState<string>("");
   const [showReassignModal, setShowReassignModal] = useState(false);
+
+  // States for inline role editing
+  const [editingEmpId, setEditingEmpId] = useState<number | null>(null);
+  const [editingRoleValue, setEditingRoleValue] = useState("");
+
+  const handleUpdateRole = async (emp: Employee, newRoleText: string) => {
+    const formattedRole = newRoleText.trim();
+    if (!formattedRole) {
+      setErrorMsg("Role description cannot be empty.");
+      return;
+    }
+
+    setErrorMsg(null);
+    setSuccessMsg("");
+
+    try {
+      const empRef = doc(db, "personnel", String(emp.id));
+      await updateDoc(empRef, {
+        info: {
+          id: emp.id,
+          name: emp.name,
+          dept: emp.dept,
+          role: formattedRole,
+        },
+      });
+
+      setSuccessMsg(`Successfully updated role for ${emp.name} to "${formattedRole}"!`);
+      setEditingEmpId(null);
+      setEditingRoleValue("");
+      onRefresh();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `personnel/${emp.id}`);
+    }
+  };
 
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,7 +310,60 @@ export default function TeamManagement({ personnel, onRefresh }: TeamManagementP
                     >
                       <div>
                         <h4 className="font-bold text-gray-900 text-sm uppercase">{emp.name}</h4>
-                        <p className="text-xs text-gray-500 font-medium">{emp.role}</p>
+                        {editingEmpId === emp.id ? (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editingRoleValue}
+                              onChange={(e) => setEditingRoleValue(e.target.value)}
+                              className="px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-gray-700 w-44"
+                              placeholder="New Role Description"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleUpdateRole(emp, editingRoleValue);
+                                } else if (e.key === "Escape") {
+                                  setEditingEmpId(null);
+                                  setEditingRoleValue("");
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateRole(emp, editingRoleValue)}
+                              className="p-1 px-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
+                              title="Save new role"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEmpId(null);
+                                setEditingRoleValue("");
+                              }}
+                              className="p-1 px-1.5 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-bold transition-all cursor-pointer flex items-center justify-center"
+                              title="Cancel"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-2 group/role">
+                            <p className="text-xs text-gray-500 font-bold">{emp.role}</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEmpId(emp.id);
+                                setEditingRoleValue(emp.role);
+                              }}
+                              className="opacity-75 md:opacity-0 md:group-hover/role:opacity-100 hover:text-blue-600 text-gray-400 p-0.5 rounded transition-all cursor-pointer inline-flex items-center"
+                              title="Edit role description"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <div className="mt-3 flex gap-2">
                           <span className="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-md font-semibold">
                             ID: {emp.id}

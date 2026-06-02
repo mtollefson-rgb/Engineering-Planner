@@ -40,6 +40,7 @@ export default function Samples({
   const [selectedProd, setSelectedProd] = useState("");
   const [qty, setQty] = useState(1);
   const [successMsg, setSuccessMsg] = useState("");
+  const [hoveredMonths, setHoveredMonths] = useState<Record<string, number | null>>({});
 
   const products = Object.keys(categoryCosts).sort();
 
@@ -205,10 +206,16 @@ export default function Samples({
 
             const targetY = height - padding - (target * (height - 2 * padding)) / maxVal;
 
+            const hIdx = hoveredMonths[prod];
+            const hasHover = hIdx !== undefined && hIdx !== null;
+            const hoveredVal = hasHover ? sums[hIdx] : 0;
+            const hoveredX = hasHover ? padding + (hIdx * (width - 2 * padding)) / 11 : 0;
+            const hoveredY = hasHover ? height - padding - (hoveredVal * (height - 2 * padding)) / maxVal : 0;
+
             return (
               <div
                 key={prod}
-                className="bg-white p-5 border border-gray-200 rounded-xl shadow-3xs flex flex-col justify-between"
+                className="bg-white p-5 border border-gray-200 rounded-xl shadow-3xs flex flex-col justify-between relative group"
               >
                 <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
                   <span className="font-extrabold text-sm text-gray-900 tracking-tight leading-none italic uppercase">
@@ -227,8 +234,11 @@ export default function Samples({
                 </div>
 
                 {/* Sparkling vector plot */}
-                <div className="bg-gray-50 rounded-lg p-2 border border-gray-150">
-                  <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-fit">
+                <div 
+                  className="bg-gray-50 rounded-lg p-2 border border-gray-150 relative overflow-visible"
+                  onMouseLeave={() => setHoveredMonths((prev) => ({ ...prev, [prod]: null }))}
+                >
+                  <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-fit overflow-visible">
                     {/* Horizontal target guide */}
                     <line
                       x1={padding}
@@ -259,26 +269,108 @@ export default function Samples({
                     {/* Dynamic line */}
                     <polyline fill="none" stroke="#2563eb" strokeWidth={2.5} points={points} />
 
+                    {/* Vertical hover guide */}
+                    {hasHover && (
+                      <line
+                        x1={hoveredX}
+                        y1={padding}
+                        x2={hoveredX}
+                        y2={height - padding}
+                        stroke="#94a3b8"
+                        strokeWidth={1.2}
+                        strokeDasharray="3,3"
+                        pointerEvents="none"
+                      />
+                    )}
+
                     {/* Points markers */}
                     {sums.map((val, idx) => {
                       const x = padding + (idx * (width - 2 * padding)) / 11;
                       const y = height - padding - (val * (height - 2 * padding)) / maxVal;
                       const isOver = val >= target;
+                      const isCurrentlyHovered = hIdx === idx;
 
                       return (
                         <circle
                           key={idx}
                           cx={x}
                           cy={y}
-                          r={3.5}
+                          r={isCurrentlyHovered ? 5.5 : 3.5}
                           className={`${
                             isOver ? "fill-green-600 stroke-white" : "fill-blue-600 stroke-white"
-                          } stroke-1`}
-                          title={`Month: ${MONTHS[idx]}, Sum: ${val}`}
+                          } ${isCurrentlyHovered ? "stroke-2 shadow-md" : "stroke-1"} transition-all duration-150`}
+                          style={isCurrentlyHovered ? { filter: "drop-shadow(0px 2px 4px rgba(0,0,0,0.15))" } : undefined}
+                        />
+                      );
+                    })}
+
+                    {/* Highlighted active pulses on top of everything */}
+                    {hasHover && (
+                      <circle
+                        cx={hoveredX}
+                        cy={hoveredY}
+                        r={6.5}
+                        className={`${
+                          hoveredVal >= target
+                            ? "fill-green-600 stroke-green-100"
+                            : "fill-blue-600 stroke-blue-100"
+                        } stroke-2 animate-ping opacity-45`}
+                        pointerEvents="none"
+                      />
+                    )}
+
+                    {/* Invisible vertical hover tracking rects for hit-boxes */}
+                    {sums.map((val, idx) => {
+                      const x = padding + (idx * (width - 2 * padding)) / 11;
+                      return (
+                        <rect
+                          key={`hover-${idx}`}
+                          x={x - 15}
+                          y={0}
+                          width={30}
+                          height={height}
+                          fill="transparent"
+                          className="cursor-pointer"
+                          onMouseEnter={() =>
+                            setHoveredMonths((prev) => ({ ...prev, [prod]: idx }))
+                          }
                         />
                       );
                     })}
                   </svg>
+
+                  {/* Absolute positioning Custom Tooltip */}
+                  {hasHover && (
+                    <div
+                      className="absolute bg-slate-900 border border-slate-800 text-white rounded-lg px-2.5 py-1.5 shadow-xl pointer-events-none z-20 select-none transition-all duration-150 ease-out"
+                      style={{
+                        left: `${(hoveredX / width) * 100}%`,
+                        top: `${(hoveredY / height) * 100}%`,
+                        transform: "translate(-50%, -125%)",
+                      }}
+                    >
+                      <div className="text-center min-w-[70px]">
+                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-wider font-mono text-center">
+                          {MONTHS[hIdx]}
+                        </p>
+                        <p className="text-xs font-black tracking-tight leading-snug text-center">
+                          {hoveredVal}{" "}
+                          <span className="text-[9px] font-semibold text-gray-300">units</span>
+                        </p>
+                        <span
+                          className={`text-[8px] font-extrabold uppercase px-1 py-0.2 rounded-xs block mt-0.5 text-center ${
+                            hoveredVal >= target
+                              ? "bg-green-500/20 text-green-300 border border-green-500/10"
+                              : "bg-orange-500/20 text-orange-400 border border-orange-500/10"
+                          }`}
+                        >
+                          {hoveredVal >= target ? "Goal Met" : `${target - hoveredVal} short`}
+                        </span>
+                      </div>
+                      {/* Little triangle arrow at bottom */}
+                      <div className="absolute left-1/2 bottom-0 w-2 h-2 bg-slate-900 border-r border-b border-slate-800 transform -translate-x-1/2 translate-y-1/2 rotate-45" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Abbreviated horizontal labels */}
