@@ -354,6 +354,10 @@ export default function App() {
     });
   };
 
+  const handleGoToToday = () => {
+    setCurrentWeekStart(getMonday(new Date()));
+  };
+
   // Helper to deduplicate tasks list by id, preserving the latest element (usually trailing)
   const deduplicateTasks = (tasks: Task[]): Task[] => {
     const seen = new Set<string>();
@@ -789,6 +793,7 @@ export default function App() {
               activeDept="eng"
               currentWeekStart={currentWeekStart}
               onChangeWeek={handleWeekChange}
+              onGoToToday={handleGoToToday}
               categoryCosts={categoryCosts}
               onAddTask={handleAddNewTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
@@ -806,6 +811,7 @@ export default function App() {
               activeDept="qual"
               currentWeekStart={currentWeekStart}
               onChangeWeek={handleWeekChange}
+              onGoToToday={handleGoToToday}
               categoryCosts={categoryCosts}
               onAddTask={handleAddNewTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}

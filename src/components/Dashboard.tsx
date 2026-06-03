@@ -54,6 +54,7 @@ interface DashboardProps {
   taskTypes: Record<string, TaskTypeConfig>;
   focusedTaskInfo?: { pId: number; tId: number; date: Date } | null;
   onClearFocusTask?: () => void;
+  onGoToToday?: () => void;
 }
 
 export default function Dashboard({
@@ -69,6 +70,7 @@ export default function Dashboard({
   taskTypes,
   focusedTaskInfo,
   onClearFocusTask,
+  onGoToToday,
 }: DashboardProps) {
   // Input fields state
   const [selectedEmpId, setSelectedEmpId] = useState<number>(0);
@@ -322,13 +324,33 @@ export default function Dashboard({
   return (
     <div className="space-y-6">
       {/* Weekly Navigator */}
-      <div className="flex items-center justify-between bg-white px-6 py-4 rounded-xl border border-gray-150 shadow-xs">
-        <button
-          onClick={() => onChangeWeek(-1)}
-          className="p-1.5 border border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
-        >
-          <ChevronLeft className="h-5 w-5 text-gray-600" />
-        </button>
+      <div className="flex flex-col sm:flex-row items-center gap-4 sm:justify-between bg-white px-6 py-4 rounded-xl border border-gray-150 shadow-xs">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => onChangeWeek(-1)}
+              className="p-1.5 border border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Previous Week"
+            >
+              <ChevronLeft className="h-5 w-5 text-gray-600" />
+            </button>
+            <button
+              onClick={() => onChangeWeek(1)}
+              className="p-1.5 border border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Next Week"
+            >
+              <ChevronRight className="h-5 w-5 text-gray-600" />
+            </button>
+          </div>
+          {onGoToToday && (
+            <button
+              onClick={onGoToToday}
+              className="px-3.5 py-1.5 border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold rounded-lg tracking-wide uppercase transition-colors cursor-pointer"
+            >
+              Today
+            </button>
+          )}
+        </div>
         <span className="text-sm font-bold text-blue-600 uppercase tracking-wider flex items-center">
           <Calendar className="mr-2 h-5 w-5 text-blue-500" />
           {currentWeekStart.toLocaleDateString("en-US", {
@@ -343,12 +365,8 @@ export default function Dashboard({
             year: "numeric",
           })}
         </span>
-        <button
-          onClick={() => onChangeWeek(1)}
-          className="p-1.5 border border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
-        >
-          <ChevronRight className="h-5 w-5 text-gray-600" />
-        </button>
+        {/* Balanced spacer so central span stays centered on desktop */}
+        <div className="w-[145px] hidden sm:block" />
       </div>
 
       {focusedTaskInfo && (
