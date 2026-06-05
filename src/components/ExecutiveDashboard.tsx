@@ -5,7 +5,8 @@
 
 import React, { useState } from "react";
 import { Employee, Task } from "../types";
-import { Calendar, Award, TrendingDown, Clock, ShieldAlert, BarChart } from "lucide-react";
+import { Calendar, Award, TrendingDown, Clock, ShieldAlert, BarChart, X, Activity, AlertCircle, CheckCircle } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface ExecutiveDashboardProps {
   personnel: Employee[];
@@ -29,6 +30,10 @@ const MONTHS = [
 export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProps) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<"All" | number>("All");
+  const [selectedTaskForModal, setSelectedTaskForModal] = useState<{
+    task: Task;
+    empName: string;
+  } | null>(null);
 
   const years = [2025, 2026, 2027];
 
@@ -37,6 +42,16 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
     if (!d) return null;
     if (d.toDate) return d.toDate();
     return new Date(d);
+  };
+
+  const formatLocalDate = (d: any) => {
+    const parsed = parseTaskDate(d);
+    if (!parsed) return "N/A";
+    return parsed.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
   // 1. Compute Reliability Scores
@@ -58,10 +73,7 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
   // 2. Compute Top Time Consumers
   const allTasksMatched: {
     empName: string;
-    category: string;
-    type: string;
-    hours: number;
-    completed: boolean;
+    task: Task;
   }[] = [];
 
   personnel.forEach((p) => {
@@ -71,10 +83,7 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
         if (selectedMonth === "All" || startD.getMonth() === selectedMonth) {
           allTasksMatched.push({
             empName: p.name,
-            category: t.category,
-            type: t.type,
-            hours: Number(t.totalHours) || 0,
-            completed: t.completed || t.isDone || false,
+            task: t,
           });
         }
       }
@@ -82,8 +91,8 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
   });
 
   const topTimeConsumers = [...allTasksMatched]
-    .sort((a, b) => b.hours - a.hours)
-    .slice(0, 5);
+    .sort((a, b) => (Number(b.task.totalHours) || 0) - (Number(a.task.totalHours) || 0))
+    .slice(0, 8);
 
   // 3. Compute Monthly Stats Table Matrices (Total Hours vs Efficiency Loss)
   const computeMonthlyAggregate = (monIdx: number, pId: number) => {
@@ -302,7 +311,7 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
         </div>
 
         {/* Top Time Consumers */}
-        <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-xs flex flex-col justify-between">
+        <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-xs flex flex-col">
           <div className="border-b border-gray-100 pb-3 mb-4 flex items-center">
             <Clock className="text-amber-500 mr-2 h-5.5 w-5.5" />
             <h3 className="font-extrabold text-sm uppercase text-gray-900 tracking-tight leading-none">
@@ -310,27 +319,49 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
             </h3>
           </div>
 
-          <div className="space-y-3 flex-1 overflow-y-auto max-h-52">
+          <div className="space-y-2 flex-1 overflow-y-auto max-h-[300px] pr-1">
             {topTimeConsumers.length === 0 ? (
               <p className="text-gray-400 italic text-center py-8 text-xs font-medium">
                 No hours logged matching filters.
               </p>
             ) : (
-                topTimeConsumers.map((t, idx) => (
-                  <div key={idx} className="border border-gray-150 rounded-lg p-2.5 bg-gray-50 flex items-center justify-between text-xs font-semibold">
-                    <div className="min-w-0">
-                      <span className="font-extrabold text-gray-900 block truncate uppercase leading-tight">
+              topTimeConsumers.map((item, idx) => {
+                const t = item.task;
+                const isBlocked = t.blocked;
+                const isCompleted = t.completed || t.isDone;
+
+                let borderClass = "border-gray-150 hover:border-blue-300 hover:bg-blue-50/20";
+                let badgeClass = "bg-blue-50 text-blue-700 border-blue-200";
+
+                if (isBlocked) {
+                  borderClass = "border-red-150 hover:border-red-300 hover:bg-red-50/20";
+                  badgeClass = "bg-red-50 text-red-700 border-red-200";
+                } else if (isCompleted) {
+                  borderClass = "border-green-150 hover:border-green-300 hover:bg-green-50/20";
+                  badgeClass = "bg-green-50 text-green-700 border-green-200";
+                }
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedTaskForModal({ task: t, empName: item.empName })}
+                    className={`border ${borderClass} rounded-lg p-2.5 bg-gray-50 flex items-center justify-between text-xs font-semibold transition-all cursor-pointer shadow-3xs active:scale-[0.99] group`}
+                    title="Click to view full task details"
+                  >
+                    <div className="min-w-0 mr-2 flex-1 animate-fadeIn">
+                      <span className="font-extrabold text-gray-900 block truncate uppercase leading-tight group-hover:text-blue-600 transition-colors">
                         {t.category} - {t.type}
                       </span>
                       <span className="text-[10px] text-gray-400 font-bold block mt-0.5 uppercase">
-                        OWNER: {t.empName}
+                        OWNER: {item.empName}
                       </span>
                     </div>
-                    <span className="bg-blue-50 text-blue-700 min-w-14 text-center py-1 rounded-md border border-blue-200 font-extrabold text-[11px] h-fit flex-shrink-0">
-                      {t.hours.toFixed(1)}h
+                    <span className={`min-w-14 text-center py-1 px-1.5 rounded-md border font-extrabold text-[11px] h-fit flex-shrink-0 ${badgeClass}`}>
+                      {(Number(t.totalHours) || 0).toFixed(1)}h
                     </span>
                   </div>
-                ))
+                );
+              })
             )}
           </div>
         </div>
@@ -455,6 +486,189 @@ export default function ExecutiveDashboard({ personnel }: ExecutiveDashboardProp
           </div>
         </div>
       </div>
+
+      {/* Task Details Modal */}
+      <AnimatePresence>
+        {selectedTaskForModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedTaskForModal(null)}
+              className="absolute inset-0 bg-gray-900/60 backdrop-blur-xs"
+            />
+
+            {/* Modal Body */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-150 max-w-lg w-full overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="bg-blue-600 px-6 py-4 text-white flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] bg-blue-700 text-blue-100 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Task #{selectedTaskForModal.task.id}
+                  </span>
+                  <h2 className="text-base font-extrabold uppercase tracking-tight mt-1">
+                    {selectedTaskForModal.task.category}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedTaskForModal(null)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-6 space-y-5 overflow-y-auto text-xs font-semibold text-gray-700">
+                {/* Meta details */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold uppercase">Task Type</label>
+                    <span className="font-extrabold text-sm text-gray-900 uppercase">
+                      {selectedTaskForModal.task.type}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <label className="block text-[10px] text-gray-400 font-bold uppercase">Task Owner</label>
+                    <span className="font-extrabold text-sm text-blue-600 uppercase">
+                      {selectedTaskForModal.empName}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Badges / Indicators */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold uppercase mb-1">Status</label>
+                    {selectedTaskForModal.task.blocked ? (
+                      <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-md font-bold uppercase text-[10px]">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Blocked
+                      </span>
+                    ) : selectedTaskForModal.task.completed || selectedTaskForModal.task.isDone ? (
+                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-md font-bold uppercase text-[10px]">
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Completed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md font-bold uppercase text-[10px]">
+                        <Activity className="h-3.5 w-3.5 animate-pulse" />
+                        In Progress
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold uppercase mb-1">Priority</label>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md border font-bold uppercase text-[10px] ${
+                      selectedTaskForModal.task.priority === "High"
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : selectedTaskForModal.task.priority === "Medium"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-gray-50 text-gray-600 border-gray-200"
+                    }`}>
+                      {selectedTaskForModal.task.priority || "Normal"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics Box */}
+                <div className="bg-gray-50 border border-gray-150 rounded-xl p-4 grid grid-cols-2 gap-x-4 gap-y-3 font-mono text-[11px]">
+                  <div>
+                    <span className="text-[9px] text-gray-400 uppercase font-sans font-bold block mb-0.5">Total Hours</span>
+                    <span className="text-gray-900 font-extrabold text-sm">
+                      {(Number(selectedTaskForModal.task.totalHours) || 0).toFixed(1)}h
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-400 uppercase font-sans font-bold block mb-0.5">Quantity / Units</span>
+                    <span className="text-gray-900 font-extrabold text-sm">
+                      {selectedTaskForModal.task.qty || 1} Units
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-400 uppercase font-sans font-bold block mb-0.5">Eff. (Rate/Unit)</span>
+                    <span className="text-gray-900 font-extrabold">
+                      {(Number(selectedTaskForModal.task.costPerUnit) || 0).toFixed(2)} hrs
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-400 uppercase font-sans font-bold block mb-0.5">Daily Allocation</span>
+                    <span className="text-gray-900 font-extrabold">
+                      {(Number(selectedTaskForModal.task.dailyRate) || 0).toFixed(2)} h/day
+                    </span>
+                  </div>
+                </div>
+
+                {/* Timeline info */}
+                <div className="space-y-2 border-b border-gray-100 pb-3">
+                  <h4 className="font-extrabold text-gray-950 uppercase text-[10px] tracking-wider text-gray-400">Schedule & Dates</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-gray-400 block text-[10px]">Start Date</span>
+                      <span className="font-bold text-gray-800">{formatLocalDate(selectedTaskForModal.task.start)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px]">End Date</span>
+                      <span className="font-bold text-gray-800">{formatLocalDate(selectedTaskForModal.task.end)}</span>
+                    </div>
+                  </div>
+                  {(selectedTaskForModal.task.completedDate || selectedTaskForModal.task.completed) && (
+                    <div className="pt-1.5">
+                      <span className="text-green-600 block text-[10px]">Completion Date</span>
+                      <span className="font-extrabold text-green-700">
+                        {formatLocalDate(selectedTaskForModal.task.completedDate || selectedTaskForModal.task.end)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Comments / Details */}
+                <div>
+                  <h4 className="font-extrabold text-gray-950 uppercase text-[10px] tracking-wider text-gray-400 mb-1.5">Comments & details</h4>
+                  <div className="bg-gray-50 border border-gray-150 p-3 rounded-xl whitespace-pre-wrap text-gray-650 font-medium leading-[normal] select-text">
+                    {selectedTaskForModal.task.details || "No operational log description is specified or recorded."}
+                  </div>
+                </div>
+
+                {/* Log history */}
+                {selectedTaskForModal.task.history && selectedTaskForModal.task.history.length > 0 && (
+                  <div>
+                    <h4 className="font-extrabold text-gray-950 uppercase text-[10px] tracking-wider text-gray-400 mb-2">History & Actions</h4>
+                    <div className="max-h-28 overflow-y-auto pr-1 space-y-2 text-[10px] font-mono border-l border-gray-200 pl-3 ml-1.5">
+                      {selectedTaskForModal.task.history.map((h, i) => (
+                        <div key={i} className="relative">
+                          <div className="absolute -left-[17px] top-1.5 w-2.5 h-2.5 rounded-full bg-gray-300 border-2 border-white" />
+                          <span className="text-gray-400 select-none">{formatLocalDate(h.date)}: </span>
+                          <span className="text-gray-700 font-semibold">{h.action}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 border-t border-gray-100 px-6 py-3.5 flex justify-end">
+                <button
+                  onClick={() => setSelectedTaskForModal(null)}
+                  className="px-4 py-2 border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-lg tracking-wide uppercase text-[11px] transition-colors cursor-pointer"
+                >
+                  Close Details
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
