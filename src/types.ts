@@ -36,11 +36,21 @@ export interface Employee {
   tasks: Task[];
 }
 
+export interface SampleEditHistory {
+  date: string;
+  editedBy: string;
+  previousQty: number;
+  newQty: number;
+  reason: string;
+}
+
 export interface SampleOrder {
+  id?: string;
   date: string;
   product: string;
   qty: number;
   loggedBy?: string;
+  editHistory?: SampleEditHistory[];
 }
 
 export interface Subtask {
